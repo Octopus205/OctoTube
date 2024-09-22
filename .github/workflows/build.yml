@@ -23,12 +23,12 @@ jobs:
         shell: bash
 
       - name: Cache Buildozer global directory
-        uses: actions/cache@v4
+        uses: actions/cache@v3
         with:
           path: .buildozer_global
           key: buildozer-global-${{ hashFiles('buildozer.spec') }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v3
         with:
           path: .buildozer
           key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('buildozer.spec') }}
@@ -79,7 +79,6 @@ jobs:
             libffi-dev \
             libssl-dev \
             automake
-
       # Set up Java 17 required by Gradle
       - name: Setup Java 17 required by Gradle
         uses: actions/setup-java@v4
@@ -98,7 +97,6 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install buildozer cython==0.29.33
-
       # Build with Buildozer
       - name: Build with Buildozer
         id: buildozer
