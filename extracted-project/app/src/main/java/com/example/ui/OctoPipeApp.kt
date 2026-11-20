@@ -151,7 +151,7 @@ fun OctoPipeApp(
                 contentWindowInsets = WindowInsets.safeDrawing,
                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
                 bottomBar = {
-                    if (!isInPipMode && !isPlayerScreen && !useRail) {
+                    if (!isInPipMode && !isPlayerScreen) {
                         Column {
                             if (playbackState.currentStream != null) {
                                 MiniPlayerBar(
@@ -169,7 +169,7 @@ fun OctoPipeApp(
                                     onClose = { viewModel.playerCoordinator.stopAndClear() }
                                 )
                             }
-                            NavigationBar(
+                            if (!useRail) NavigationBar(
                                 containerColor = MaterialTheme.colorScheme.surface
                             ) {
                                 tabs.forEach { tab ->
@@ -376,6 +376,7 @@ fun OctoPipeApp(
                                     onSeekTo = viewModel.playerCoordinator::seekTo,
                                     onSeekBy = viewModel.playerCoordinator::seekBy,
                                     onSelectQuality = viewModel.playerCoordinator::switchQuality,
+                                    onSelectAdaptiveQuality = viewModel.playerCoordinator::switchAdaptiveQuality,
                                     onSelectSubtitle = viewModel.playerCoordinator::selectSubtitle,
                                     onSetSpeed = viewModel.playerCoordinator::setSpeed,
                                     onToggleAudioOnlyMode = viewModel.playerCoordinator::toggleBackgroundAudioMode,
