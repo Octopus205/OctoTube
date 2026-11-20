@@ -38,10 +38,18 @@ class OctoPreferences(private val context: Context) {
     }
 
     val settingsFlow: Flow<OctoSettings> = context.octoDataStore.data.map { prefs ->
+        val storedProvider = prefs[Keys.ACTIVE_PROVIDER]
+        val storedPipedUrl = (prefs[Keys.CUSTOM_PIPED_URL] ?: ServiceProvider.PIPED.defaultBaseUrl).trimEnd('/')
+        // The old official Piped API endpoint has been unavailable for an extended period.
+        // Migrate only the old default selection; preserve user-configured Piped instances.
+        val migrateLegacyPipedDefault = storedProvider == ServiceProvider.PIPED.id &&
+            storedPipedUrl == ServiceProvider.PIPED.defaultBaseUrl.trimEnd('/')
         OctoSettings(
-            activeProvider = ServiceProvider.fromId(
-                prefs[Keys.ACTIVE_PROVIDER] ?: ServiceProvider.PIPED.id
-            ),
+            activeProvider = if (migrateLegacyPipedDefault) {
+                ServiceProvider.INVIDIOUS
+            } else {
+                ServiceProvider.fromId(storedProvider ?: ServiceProvider.INVIDIOUS.id)
+            },
             customPipedUrl = prefs[Keys.CUSTOM_PIPED_URL] ?: ServiceProvider.PIPED.defaultBaseUrl,
             customInvidiousUrl = prefs[Keys.CUSTOM_INVIDIOUS_URL] ?: ServiceProvider.INVIDIOUS.defaultBaseUrl,
             customPeerTubeUrl = prefs[Keys.CUSTOM_PEERTUBE_URL] ?: ServiceProvider.PEERTUBE.defaultBaseUrl,
