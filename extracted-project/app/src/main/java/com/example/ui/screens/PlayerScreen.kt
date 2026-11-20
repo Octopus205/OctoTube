@@ -260,7 +260,7 @@ fun PlayerScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        val wideLandscape = maxWidth >= 840.dp && maxWidth > maxHeight
+        val wideLandscape = maxWidth >= 600.dp && maxWidth > maxHeight
         val playerHeight = maxWidth * (9f / 16f)
         // In tablet landscape, keep the player on the left and scrollable details/related videos on the right.
         // In portrait, the same content remains stacked vertically.
