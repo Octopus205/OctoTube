@@ -9,6 +9,7 @@ import com.example.domain.model.VideoSummary
 import java.net.URI
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class FeedFetchResult(
     val videos: List<VideoSummary>,
@@ -135,7 +136,7 @@ class OctoExtractorEngine(
         // Run NewPipe extraction concurrently with the metadata provider so its
         // format list is ready without adding another sequential network round-trip.
         val newPipeJob = if (provider != ServiceProvider.PEERTUBE) {
-            async { runCatching { NewPipeYouTubeExtractor.extract(videoId) }.getOrNull() }
+            async { withTimeoutOrNull(12_000L) { runCatching { NewPipeYouTubeExtractor.extract(videoId) }.getOrNull() } }
         } else null
 
         val candidates = buildInstanceList(provider, settings)
