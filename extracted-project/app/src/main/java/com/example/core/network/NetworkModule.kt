@@ -60,6 +60,14 @@ object NetworkModule {
         }
     }
 
+    suspend fun getMediaString(url: String): String = withContext(Dispatchers.IO) {
+        val request = Request.Builder().url(url).get().build()
+        downloadOkHttpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) throw IOException("HTTP ${response.code} from $url")
+            response.body?.string() ?: throw IOException("Empty media response from $url")
+        }
+    }
+
     suspend fun pingUrl(url: String): Pair<Boolean, Long> = withContext(Dispatchers.IO) {
         val start = System.currentTimeMillis()
         try {
