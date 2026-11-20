@@ -6,6 +6,7 @@ import com.example.domain.model.ServiceInstanceHealth
 import com.example.domain.model.ServiceProvider
 import com.example.domain.model.StreamDetail
 import com.example.domain.model.VideoSummary
+import java.net.URI
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -168,7 +169,44 @@ class OctoExtractorEngine(
                         )
                     } else detail
                 } else detail
-                return@coroutineScope enrichedDetail.copy(sponsorSegments = segments)
+                val hlsVariants = enrichedDetail.hlsUrl?.let { manifestUrl ->
+                    runCatching {
+                        val manifest = NetworkModule.getMediaString(manifestUrl)
+                        val lines = manifest.lines()
+                        val variants = mutableListOf<com.example.domain.model.VideoStreamOption>()
+                        for (index in lines.indices) {
+                            val line = lines[index].trim()
+                            if (!line.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) continue
+                            val nextUri = lines.drop(index + 1).firstOrNull {
+                                it.isNotBlank() && !it.trimStart().startsWith("#")
+                            }?.trim() ?: continue
+                            val resolution = Regex("RESOLUTION=\\d+x(\\d+)", RegexOption.IGNORE_CASE)
+                                .find(line)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
+                            val bandwidth = Regex("BANDWIDTH=(\\d+)", RegexOption.IGNORE_CASE)
+                                .find(line)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+                            val variantUrl = URI(manifestUrl).resolve(nextUri).toString()
+                            if (resolution > 0) {
+                                variants += com.example.domain.model.VideoStreamOption(
+                                    url = variantUrl,
+                                    qualityLabel = "${resolution}p (HLS)",
+                                    height = resolution,
+                                    mimeType = "application/vnd.apple.mpegurl",
+                                    videoOnly = false,
+                                    bitrate = bandwidth
+                                )
+                            }
+                        }
+                        variants.distinctBy { it.url }.sortedByDescending { it.height }
+                    }.getOrDefault(emptyList())
+                } ?: emptyList()
+                val finalDetail = if (hlsVariants.isNotEmpty()) {
+                    enrichedDetail.copy(
+                        videoStreams = (enrichedDetail.videoStreams + hlsVariants)
+                            .distinctBy { it.url }
+                            .sortedByDescending { it.height }
+                    )
+                } else enrichedDetail
+                return@coroutineScope finalDetail.copy(sponsorSegments = segments)
             } catch (_: Exception) {
             }
         }
