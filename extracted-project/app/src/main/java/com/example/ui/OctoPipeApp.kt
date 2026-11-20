@@ -426,7 +426,7 @@ fun OctoPipeApp(
                             }
                         }
                         }
-                        if (useRail && !isPlayerScreen && !isInPipMode && playbackState.currentStream != null) {
+                        if (!isPlayerScreen && !isInPipMode && playbackState.currentStream != null) {
                             MiniPlayerBar(
                                 playbackState = playbackState,
                                 onExpand = {
