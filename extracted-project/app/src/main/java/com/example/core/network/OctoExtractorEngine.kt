@@ -8,6 +8,7 @@ import com.example.domain.model.StreamDetail
 import com.example.domain.model.VideoSummary
 import java.net.URI
 import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withTimeoutOrNull
 
@@ -121,137 +122,106 @@ class OctoExtractorEngine(
         provider: ServiceProvider,
         settings: OctoSettings
     ): StreamDetail = coroutineScope {
-        OpenMediaCatalog.getDetail(videoId, provider)?.let { fallback ->
-            return@coroutineScope fallback
-        }
+        OpenMediaCatalog.getDetail(videoId, provider)?.let { return@coroutineScope it }
 
         val sponsorJob = async {
             if (settings.sponsorBlockEnabled && provider != ServiceProvider.PEERTUBE) {
                 sponsorBlock.fetchSkipSegments(videoId, settings.enabledSponsorCategories)
-            } else {
-                emptyList()
-            }
+            } else emptyList()
         }
-
-        // Run NewPipe extraction concurrently with the metadata provider so its
-        // format list is ready without adding another sequential network round-trip.
         val newPipeJob = if (provider != ServiceProvider.PEERTUBE) {
-            async { withTimeoutOrNull(12_000L) { runCatching { NewPipeYouTubeExtractor.extract(videoId) }.getOrNull() } }
+            async {
+                withTimeoutOrNull(3_500L) {
+                    runCatching { NewPipeYouTubeExtractor.extract(videoId) }.getOrNull()
+                }
+            }
         } else null
 
-        val candidates = buildInstanceList(provider, settings)
-        for (baseUrl in candidates) {
-            try {
-                val detail = when (provider) {
-                    ServiceProvider.PIPED -> piped.getStreamDetail(baseUrl, videoId)
-                    ServiceProvider.INVIDIOUS -> invidious.getStreamDetail(baseUrl, videoId)
-                    ServiceProvider.PEERTUBE -> peerTube.getStreamDetail(baseUrl, videoId)
-                }
-                val segments = sponsorJob.await()
-                // Invidious instances sometimes expose HLS playback but no progressive MP4
-                // formats. Ask Piped for direct downloadable formats as a secondary source.
-                val enrichedDetail = if (
-                    provider == ServiceProvider.INVIDIOUS &&
-                    detail.videoStreams.none {
-                        !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
-                    }
-                ) {
-                    var directFormats = emptyList<com.example.domain.model.VideoStreamOption>()
-                    var directAudio = emptyList<com.example.domain.model.AudioStreamOption>()
-                    var pipedHlsUrl: String? = null
-                    for (pipedUrl in buildInstanceList(ServiceProvider.PIPED, settings)) {
-                        try {
-                            val pipedDetail = piped.getStreamDetail(pipedUrl, videoId)
-                            directFormats = pipedDetail.videoStreams.filter {
-                                !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
-                            }
-                            directAudio = pipedDetail.audioStreams
-                            pipedHlsUrl = pipedDetail.hlsUrl
-                            if (directFormats.isNotEmpty() || !pipedHlsUrl.isNullOrBlank()) break
-                        } catch (_: Exception) {
-                        }
-                    }
-                    if (directFormats.isNotEmpty() || !pipedHlsUrl.isNullOrBlank()) {
-                        detail.copy(
-                            hlsUrl = detail.hlsUrl ?: pipedHlsUrl,
-                            videoStreams = (detail.videoStreams + directFormats).distinctBy { it.url },
-                            audioStreams = (detail.audioStreams + directAudio).distinctBy { it.url }
-                        )
-                    } else detail
-                } else detail
-                val hlsVariants = enrichedDetail.hlsUrl?.let { manifestUrl ->
-                    runCatching {
-                        val manifest = NetworkModule.getMediaString(manifestUrl)
-                        val lines = manifest.lines()
-                        val variants = mutableListOf<com.example.domain.model.VideoStreamOption>()
-                        for (index in lines.indices) {
-                            val line = lines[index].trim()
-                            if (!line.startsWith("#EXT-X-STREAM-INF", ignoreCase = true)) continue
-                            val nextUri = lines.drop(index + 1).firstOrNull {
-                                it.isNotBlank() && !it.trimStart().startsWith("#")
-                            }?.trim() ?: continue
-                            val resolution = Regex("RESOLUTION=\\d+x(\\d+)", RegexOption.IGNORE_CASE)
-                                .find(line)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 0
-                            val bandwidth = Regex("BANDWIDTH=(\\d+)", RegexOption.IGNORE_CASE)
-                                .find(line)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
-                            val variantUrl = URI(manifestUrl).resolve(nextUri).toString()
-                            if (resolution > 0) {
-                                variants += com.example.domain.model.VideoStreamOption(
-                                    url = variantUrl,
-                                    qualityLabel = "${resolution}p (HLS)",
-                                    height = resolution,
-                                    mimeType = "application/vnd.apple.mpegurl",
-                                    videoOnly = false,
-                                    bitrate = bandwidth
-                                )
-                            }
-                        }
-                        variants.distinctBy { it.url }.sortedByDescending { it.height }
-                    }.getOrDefault(emptyList())
-                } ?: emptyList()
-                val finalDetail = if (hlsVariants.isNotEmpty()) {
-                    enrichedDetail.copy(
-                        videoStreams = (enrichedDetail.videoStreams + hlsVariants)
-                            .distinctBy { it.url }
-                            .sortedByDescending { it.height }
-                    )
-                } else enrichedDetail
-                val newPipeFormats = newPipeJob?.await()
-                val mergedDetail = if (newPipeFormats != null) {
-                    finalDetail.copy(
-                        videoStreams = (finalDetail.videoStreams + newPipeFormats.videos)
-                            .distinctBy { "${it.height}:${it.videoOnly}:${it.mimeType}:${it.url.substringBefore("?")}" }
-                            .sortedByDescending { it.height },
-                        audioStreams = (finalDetail.audioStreams + newPipeFormats.audio)
-                            .distinctBy { "${it.bitrate}:${it.mimeType}:${it.url.substringBefore("?")}" }
-                            .sortedByDescending { it.bitrate }
-                    )
-                } else finalDetail
-                return@coroutineScope mergedDetail.copy(sponsorSegments = segments)
-            } catch (_: Exception) {
-            }
-        }
-
-        // Cross-engine YouTube failover (Piped <-> Invidious)
-        val altProvider = if (provider == ServiceProvider.PIPED) {
-            ServiceProvider.INVIDIOUS
+        // Race public instances and both YouTube extractor backends. The first
+        // valid response wins; slower mirrors are cancelled instead of awaited.
+        val candidates = if (provider == ServiceProvider.PEERTUBE) {
+            buildInstanceList(provider, settings).map { provider to it }
         } else {
-            ServiceProvider.PIPED
+            val alternate = if (provider == ServiceProvider.PIPED) {
+                ServiceProvider.INVIDIOUS
+            } else ServiceProvider.PIPED
+            (buildInstanceList(provider, settings).map { provider to it } +
+                buildInstanceList(alternate, settings).map { alternate to it })
+                .distinctBy { it.second }
         }
-        for (baseUrl in altProvider.fallbackUrls) {
-            try {
-                val detail = when (altProvider) {
-                    ServiceProvider.PIPED -> piped.getStreamDetail(baseUrl, videoId)
-                    ServiceProvider.INVIDIOUS -> invidious.getStreamDetail(baseUrl, videoId)
-                    ServiceProvider.PEERTUBE -> peerTube.getStreamDetail(baseUrl, videoId)
+
+        val resultChannel = kotlinx.coroutines.channels.Channel<Pair<StreamDetail, String>>(candidates.size)
+        val requests = candidates.map { (sourceProvider, baseUrl) ->
+            launch {
+                try {
+                    val detail = when (sourceProvider) {
+                        ServiceProvider.PIPED -> piped.getStreamDetail(baseUrl, videoId)
+                        ServiceProvider.INVIDIOUS -> invidious.getStreamDetail(baseUrl, videoId)
+                        ServiceProvider.PEERTUBE -> peerTube.getStreamDetail(baseUrl, videoId)
+                    }
+                    if (detail.videoStreams.isNotEmpty() || !detail.hlsUrl.isNullOrBlank()) {
+                        resultChannel.send(detail.copy(serviceProvider = sourceProvider, sourceInstance = baseUrl) to baseUrl)
+                    }
+                } catch (_: Exception) {
+                    // Another instance may still return a valid stream.
                 }
-                val segments = sponsorJob.await()
-                return@coroutineScope detail.copy(sponsorSegments = segments)
-            } catch (_: Exception) {
             }
         }
 
-        throw IllegalStateException("تعذر استخراج روابط البث من الخوادم الحالية. جرّب تبديل الخادم في تبويب الخدمات.")
+        val winning = withTimeoutOrNull(15_000L) { resultChannel.receive() }
+        requests.forEach { it.cancel() }
+        resultChannel.close()
+        val (baseDetail, sourceUrl) = winning
+            ?: throw IllegalStateException("تعذر استخراج الفيديو من جميع المصادر المتاحة. حاول مرة أخرى بعد قليل.")
+
+        // Fetch adaptive variants without blocking initial playback for long.
+        val hlsVariants = baseDetail.hlsUrl?.let { manifestUrl ->
+            withTimeoutOrNull(2_000L) {
+                runCatching {
+                    val manifest = NetworkModule.getMediaString(manifestUrl)
+                    val lines = manifest.lines()
+                    lines.mapIndexedNotNull { index, raw ->
+                        val line = raw.trim()
+                        if (!line.startsWith("#EXT-X-STREAM-INF", true)) return@mapIndexedNotNull null
+                        val nextUri = lines.drop(index + 1).firstOrNull {
+                            it.isNotBlank() && !it.trimStart().startsWith("#")
+                        }?.trim() ?: return@mapIndexedNotNull null
+                        val height = Regex("RESOLUTION=\\d+x(\\d+)", RegexOption.IGNORE_CASE)
+                            .find(line)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: return@mapIndexedNotNull null
+                        val bandwidth = Regex("BANDWIDTH=(\\d+)", RegexOption.IGNORE_CASE)
+                            .find(line)?.groupValues?.getOrNull(1)?.toLongOrNull() ?: 0L
+                        if (height !in setOf(144, 240, 360, 720, 1080)) return@mapIndexedNotNull null
+                        VideoStreamOption(
+                            url = URI(manifestUrl).resolve(nextUri).toString(),
+                            qualityLabel = "${height}p",
+                            height = height,
+                            mimeType = "application/vnd.apple.mpegurl",
+                            videoOnly = false,
+                            bitrate = bandwidth
+                        )
+                    }.distinctBy { it.height }.sortedByDescending { it.height }
+                }.getOrDefault(emptyList())
+            }
+        } ?: emptyList()
+
+        val newPipeFormats = newPipeJob?.await()
+        val segments = sponsorJob.await()
+        val videoOptions = (baseDetail.videoStreams + hlsVariants + newPipeFormats?.videos.orEmpty())
+            .filter { it.height in setOf(144, 240, 360, 720, 1080) }
+            .distinctBy { "${it.height}:${it.videoOnly}:${it.mimeType}:${it.url.substringBefore("?")}" }
+            .sortedByDescending { it.height }
+        val audioOptions = (baseDetail.audioStreams + newPipeFormats?.audio.orEmpty())
+            .filter { it.bitrate in 1L..256L }
+            .distinctBy { "${it.bitrate}:${it.mimeType}:${it.url.substringBefore("?")}" }
+            .sortedByDescending { it.bitrate }
+            .take(5)
+
+        baseDetail.copy(
+            videoStreams = videoOptions,
+            audioStreams = audioOptions,
+            sponsorSegments = segments,
+            sourceInstance = sourceUrl
+        )
     }
 
     suspend fun fetchChannel(
