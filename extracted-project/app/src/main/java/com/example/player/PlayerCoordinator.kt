@@ -485,7 +485,7 @@ class PlayerCoordinator(
 
     private suspend fun awaitController(): MediaController? {
         mediaController?.let { return it }
-        repeat(30) {
+        repeat(100) {
             delay(100L)
             mediaController?.let { return it }
         }
