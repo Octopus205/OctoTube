@@ -19,6 +19,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      OCTOTUBE_SIGNING_CONFIGURED: ${{ secrets.OCTOTUBE_KEYSTORE_BASE64 != '' && secrets.OCTOTUBE_STORE_PASSWORD != '' && secrets.OCTOTUBE_KEY_PASSWORD != '' && 'true' || 'false' }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v4
@@ -78,7 +80,7 @@ jobs:
           retention-days: 14
 
       - name: Prepare persistent release signing key
-        if: ${{ secrets.OCTOTUBE_KEYSTORE_BASE64 != '' && secrets.OCTOTUBE_STORE_PASSWORD != '' && secrets.OCTOTUBE_KEY_PASSWORD != '' }}
+        if: ${{ env.OCTOTUBE_SIGNING_CONFIGURED == 'true' }}
         shell: bash
         env:
           KEYSTORE_BASE64: ${{ secrets.OCTOTUBE_KEYSTORE_BASE64 }}
@@ -110,6 +112,6 @@ jobs:
           retention-days: 30
 
       - name: Explain release signing setup
-        if: ${{ !(secrets.OCTOTUBE_KEYSTORE_BASE64 != '' && secrets.OCTOTUBE_STORE_PASSWORD != '' && secrets.OCTOTUBE_KEY_PASSWORD != '') }}
+        if: ${{ env.OCTOTUBE_SIGNING_CONFIGURED != 'true' }}
         run: |
           echo "Release APK was skipped. Add the three OCTOTUBE_* Actions secrets to enable persistent signing."
