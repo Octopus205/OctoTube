@@ -140,7 +140,35 @@ class OctoExtractorEngine(
                     ServiceProvider.PEERTUBE -> peerTube.getStreamDetail(baseUrl, videoId)
                 }
                 val segments = sponsorJob.await()
-                return@coroutineScope detail.copy(sponsorSegments = segments)
+                // Invidious instances sometimes expose HLS playback but no progressive MP4
+                // formats. Ask Piped for direct downloadable formats as a secondary source.
+                val enrichedDetail = if (
+                    provider == ServiceProvider.INVIDIOUS &&
+                    detail.videoStreams.none {
+                        !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                    }
+                ) {
+                    var directFormats = emptyList<com.example.domain.model.VideoStreamOption>()
+                    var directAudio = emptyList<com.example.domain.model.AudioStreamOption>()
+                    for (pipedUrl in buildInstanceList(ServiceProvider.PIPED, settings)) {
+                        try {
+                            val pipedDetail = piped.getStreamDetail(pipedUrl, videoId)
+                            directFormats = pipedDetail.videoStreams.filter {
+                                !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                            }
+                            directAudio = pipedDetail.audioStreams
+                            if (directFormats.isNotEmpty()) break
+                        } catch (_: Exception) {
+                        }
+                    }
+                    if (directFormats.isNotEmpty()) {
+                        detail.copy(
+                            videoStreams = (detail.videoStreams + directFormats).distinctBy { it.url },
+                            audioStreams = (detail.audioStreams + directAudio).distinctBy { it.url }
+                        )
+                    } else detail
+                } else detail
+                return@coroutineScope enrichedDetail.copy(sponsorSegments = segments)
             } catch (_: Exception) {
             }
         }
