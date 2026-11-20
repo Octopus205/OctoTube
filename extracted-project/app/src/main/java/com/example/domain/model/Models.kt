@@ -26,11 +26,12 @@ enum class ServiceProvider(
         id = "invidious",
         displayName = "Invidious API",
         subtitle = "محرك استخراج مفتوح المصدر لبيانات يوتيوب",
-        defaultBaseUrl = "https://inv.nadeko.net",
+        defaultBaseUrl = "https://invidious.tiekoetter.com",
         fallbackUrls = listOf(
+            "https://invidious.tiekoetter.com",
             "https://inv.nadeko.net",
             "https://invidious.nerdvpn.de",
-            "https://yewtu.be"
+            "https://yt.chocolatemoo53.com"
         )
     ),
     PEERTUBE(
@@ -46,7 +47,7 @@ enum class ServiceProvider(
 
     companion object {
         fun fromId(id: String): ServiceProvider =
-            entries.firstOrNull { it.id == id } ?: PIPED
+            entries.firstOrNull { it.id == id } ?: INVIDIOUS
     }
 }
 
@@ -206,7 +207,7 @@ data class DownloadTask(
 )
 
 data class OctoSettings(
-    val activeProvider: ServiceProvider = ServiceProvider.PIPED,
+    val activeProvider: ServiceProvider = ServiceProvider.INVIDIOUS,
     val customPipedUrl: String = ServiceProvider.PIPED.defaultBaseUrl,
     val customInvidiousUrl: String = ServiceProvider.INVIDIOUS.defaultBaseUrl,
     val customPeerTubeUrl: String = ServiceProvider.PEERTUBE.defaultBaseUrl,
