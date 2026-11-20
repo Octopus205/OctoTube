@@ -106,6 +106,10 @@ fun OctoPipeApp(
 
     val snackbarHostState = remember { SnackbarHostState() }
 
+    val downloadFolderLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri -> uri?.let(viewModel::setDownloadFolder) }
+
     val notifLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { }
@@ -320,7 +324,8 @@ fun OctoPipeApp(
                                         navController.navigate(PlayerRoute(task.videoId, task.serviceId))
                                     },
                                     onCancelDownload = viewModel.downloadManager::cancelDownload,
-                                    onDeleteDownload = viewModel.downloadManager::deleteDownload
+                                    onDeleteDownload = viewModel.downloadManager::deleteDownload,
+                                    onChooseFolder = { downloadFolderLauncher.launch(null) }
                                 )
                             }
 
