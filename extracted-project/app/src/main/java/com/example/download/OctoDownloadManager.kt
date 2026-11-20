@@ -2,6 +2,8 @@ package com.example.download
 
 import android.content.Context
 import android.os.Environment
+import android.net.Uri
+import android.provider.DocumentsContract
 import com.example.core.network.NetworkModule
 import java.net.URI
 import com.example.data.local.DownloadedMediaEntity
@@ -34,6 +36,34 @@ class OctoDownloadManager(
         return File(base, "OctoPipe").apply { if (!exists()) mkdirs() }
     }
 
+    fun setDownloadFolder(uri: Uri) {
+        context.contentResolver.takePersistableUriPermission(
+            uri,
+            android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+        )
+        context.getSharedPreferences("octotube_downloads", Context.MODE_PRIVATE)
+            .edit().putString("folder_uri", uri.toString()).apply()
+    }
+
+    private fun selectedFolderUri(): Uri? =
+        context.getSharedPreferences("octotube_downloads", Context.MODE_PRIVATE)
+            .getString("folder_uri", null)?.let(Uri::parse)
+
+    private fun createTargetDocument(folder: Uri, name: String, mimeType: String): Uri? {
+        val treeId = DocumentsContract.getTreeDocumentId(folder)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(folder, treeId)
+        return DocumentsContract.createDocument(context.contentResolver, parent, mimeType, name)
+    }
+
+    private fun deleteStoredLocation(location: String) {
+        val uri = runCatching { Uri.parse(location) }.getOrNull()
+        if (uri?.scheme == "content") {
+            runCatching { context.contentResolver.delete(uri, null, null) }
+        } else {
+            runCatching { File(location).delete() }
+        }
+    }
+
     fun startDownload(
         detail: StreamDetail,
         format: DownloadFormat,
@@ -44,12 +74,37 @@ class OctoDownloadManager(
 
         val safeName = detail.id.replace(Regex("[^A-Za-z0-9_-]"), "_")
         val targetFile = File(getDownloadsDir(), "${safeName}_${format.extension}.${format.extension}")
+        val selectedFolder = selectedFolderUri()
+        val mimeType = when (format) {
+            DownloadFormat.VIDEO_HLS_TS -> "video/mp2t"
+            DownloadFormat.AUDIO_M4A -> "audio/mp4"
+            else -> "video/mp4"
+        }
         val subtitleUrl = detail.subtitles.firstOrNull { !it.url.startsWith("local://") }?.url
         val subtitleFile = if (subtitleUrl != null) {
             File(getDownloadsDir(), "${safeName}.vtt")
         } else null
 
         val job = scope.launch {
+            val targetUri = selectedFolder?.let {
+                runCatching {
+                    createTargetDocument(it, "${safeName}_${format.extension}.${format.extension}", mimeType)
+                }.getOrNull()
+            }
+            if (selectedFolder != null && targetUri == null) {
+                dao.upsertDownload(
+                    DownloadedMediaEntity(
+                        videoId = detail.id, title = detail.title, channelName = detail.channelName,
+                        thumbnailUrl = detail.thumbnailUrl, qualityLabel = qualityLabel,
+                        formatName = format.name, statusName = DownloadStatus.FAILED.name,
+                        progress = 0, downloadedBytes = 0L, totalBytes = 0L,
+                        localFilePath = "", subtitleFilePath = null,
+                        durationSeconds = detail.durationSeconds, serviceId = detail.serviceProvider.id
+                    )
+                )
+                return@launch
+            }
+            val targetLocation = targetUri?.toString() ?: targetFile.absolutePath
             dao.upsertDownload(
                 DownloadedMediaEntity(
                     videoId = detail.id,
@@ -62,7 +117,7 @@ class OctoDownloadManager(
                     progress = 0,
                     downloadedBytes = 0L,
                     totalBytes = 0L,
-                    localFilePath = targetFile.absolutePath,
+                    localFilePath = targetLocation,
                     subtitleFilePath = subtitleFile?.absolutePath,
                     durationSeconds = detail.durationSeconds,
                     serviceId = detail.serviceProvider.id
@@ -103,7 +158,7 @@ class OctoDownloadManager(
                             .map { URI(streamUrl).resolve(it).toString() }.toList()
                         if (segments.isEmpty()) throw IllegalStateException("قائمة HLS لا تحتوي مقاطع فيديو")
                         var downloaded = 0L
-                        FileOutputStream(targetFile).use { output ->
+                        (targetUri?.let { context.contentResolver.openOutputStream(it, "wt") } ?: FileOutputStream(targetFile)).use { output ->
                             segments.forEachIndexed { index, segmentUrl ->
                                 val segmentRequest = Request.Builder().url(segmentUrl).get().build()
                                 val segmentCall = NetworkModule.downloadOkHttpClient.newCall(segmentRequest)
@@ -179,7 +234,7 @@ class OctoDownloadManager(
                     total = targetFile.length()
                 )
             } catch (_: Exception) {
-                runCatching { targetFile.delete() }
+                if (targetUri != null) runCatching { context.contentResolver.delete(targetUri, null, null) } else runCatching { targetFile.delete() }
                 dao.updateDownloadProgress(
                     videoId = detail.id,
                     status = DownloadStatus.FAILED.name,
@@ -217,7 +272,7 @@ class OctoDownloadManager(
         scope.launch {
             val entity = dao.getDownloadById(videoId)
             entity?.let {
-                runCatching { File(it.localFilePath).delete() }
+                deleteStoredLocation(it.localFilePath)
                 it.subtitleFilePath?.let { subPath -> runCatching { File(subPath).delete() } }
             }
             dao.deleteDownload(videoId)
