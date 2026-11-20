@@ -6,6 +6,7 @@ import com.example.domain.model.ServiceInstanceHealth
 import com.example.domain.model.ServiceProvider
 import com.example.domain.model.StreamDetail
 import com.example.domain.model.VideoSummary
+import com.example.domain.model.VideoStreamOption
 import java.net.URI
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
