@@ -1,0 +1,16 @@
+<resources>
+    <string name="app_name">OctoTube</string>
+    <string name="nav_discover">استكشاف</string>
+    <string name="nav_subscriptions">الاشتراكات</string>
+    <string name="nav_downloads">التحميلات</string>
+    <string name="nav_services">الخدمات</string>
+    <string name="search_hint">ابحث عن فيديو أو قناة أو رابط…</string>
+    <string name="ad_free_badge">خالي من الإعلانات</string>
+    <string name="sponsor_skipped">تم تخطي مقطع رعاية تلقائياً</string>
+    <string name="background_play">تشغيل بالخلفية</string>
+    <string name="pip_mode">صورة داخل صورة</string>
+    <string name="subtitles_title">الترجمة</string>
+    <string name="download_title">تحميل</string>
+    <string name="subscribe">اشتراك</string>
+    <string name="subscribed">مشترك</string>
+</resources>

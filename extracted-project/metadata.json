@@ -1,0 +1,6 @@
+{
+  "name": "OctoTube",
+  "description": "منصة مشاهدة مستقلة خالية من الإعلانات بمعمارية استخراج متعددة المصادر مع التحميل والتشغيل في الخلفية ووضع PiP وتخطي الرعايات.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
