@@ -3,6 +3,7 @@ package com.example.download
 import android.content.Context
 import android.os.Environment
 import com.example.core.network.NetworkModule
+import java.net.URI
 import com.example.data.local.DownloadedMediaEntity
 import com.example.data.local.OctoDao
 import com.example.domain.model.DownloadFormat
@@ -85,55 +86,87 @@ class OctoDownloadManager(
                         throw IllegalStateException("HTTP ${response.code}")
                     }
                     val contentType = response.header("Content-Type").orEmpty().lowercase()
-                    if (contentType.contains("mpegurl") || streamUrl.substringBefore("?").endsWith(".m3u8", true)) {
-                        throw IllegalStateException("رابط HLS يحتاج تنزيلًا مجزأً؛ اختر رابط MP4 مباشرًا إن توفر")
-                    }
-                    val body = response.body ?: throw IllegalStateException("Empty body")
-                    val totalBytes = body.contentLength().coerceAtLeast(0L)
-                    if (contentType.contains("application/json") || contentType.startsWith("text/html")) {
-                        throw IllegalStateException("الخادم أعاد صفحة أو بيانات API بدل ملف فيديو")
-                    }
                     targetFile.parentFile?.mkdirs()
-
-                    body.byteStream().use { input ->
+                    val isHls = contentType.contains("mpegurl") ||
+                        streamUrl.substringBefore("?").endsWith(".m3u8", true)
+                    if (isHls) {
+                        response.close()
+                        val playlist = NetworkModule.getMediaString(streamUrl)
+                        if (playlist.contains("#EXT-X-KEY") && !playlist.contains("METHOD=NONE")) {
+                            throw IllegalStateException("هذا البث مشفر ولا يمكن تنزيله بهذه الطريقة")
+                        }
+                        if (playlist.contains("#EXT-X-MAP")) {
+                            throw IllegalStateException("بث HLS بصيغة fMP4 غير مدعوم حاليًا")
+                        }
+                        val segments = playlist.lineSequence().map { it.trim() }
+                            .filter { it.isNotBlank() && !it.startsWith("#") }
+                            .map { URI(streamUrl).resolve(it).toString() }.toList()
+                        if (segments.isEmpty()) throw IllegalStateException("قائمة HLS لا تحتوي مقاطع فيديو")
+                        var downloaded = 0L
                         FileOutputStream(targetFile).use { output ->
-                            val buffer = ByteArray(16 * 1024)
-                            var downloaded = 0L
-                            var lastUiUpdate = 0L
-
-                            while (true) {
-                                val read = input.read(buffer)
-                                if (read == -1) break
-                                output.write(buffer, 0, read)
-                                downloaded += read
-
-                                val now = System.currentTimeMillis()
-                                if (now - lastUiUpdate >= 250L) {
-                                    lastUiUpdate = now
-                                    val percent = if (totalBytes > 0L) {
-                                        ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99)
-                                    } else {
-                                        25
+                            segments.forEachIndexed { index, segmentUrl ->
+                                val segmentRequest = Request.Builder().url(segmentUrl).get().build()
+                                val segmentCall = NetworkModule.downloadOkHttpClient.newCall(segmentRequest)
+                                activeCalls[detail.id] = segmentCall
+                                segmentCall.execute().use { segmentResponse ->
+                                    if (!segmentResponse.isSuccessful) throw IllegalStateException("HLS segment HTTP ${segmentResponse.code}")
+                                    val segmentBody = segmentResponse.body ?: throw IllegalStateException("Empty HLS segment")
+                                    segmentBody.byteStream().use { input ->
+                                        val buffer = ByteArray(32 * 1024)
+                                        while (true) {
+                                            val count = input.read(buffer)
+                                            if (count < 0) break
+                                            output.write(buffer, 0, count)
+                                            downloaded += count
+                                        }
                                     }
-                                    dao.updateDownloadProgress(
-                                        videoId = detail.id,
-                                        status = DownloadStatus.DOWNLOADING.name,
-                                        progress = percent,
-                                        downloaded = downloaded,
-                                        total = totalBytes
-                                    )
                                 }
+                                dao.updateDownloadProgress(
+                                    videoId = detail.id,
+                                    status = DownloadStatus.DOWNLOADING.name,
+                                    progress = ((index + 1) * 100 / segments.size).coerceAtMost(99),
+                                    downloaded = downloaded,
+                                    total = 0L
+                                )
                             }
                             output.flush()
-
-                            val finalTotal = if (totalBytes > 0L) totalBytes else downloaded
-                            dao.updateDownloadProgress(
-                                videoId = detail.id,
-                                status = DownloadStatus.COMPLETED.name,
-                                progress = 100,
-                                downloaded = downloaded,
-                                total = finalTotal
-                            )
+                        }
+                        if (downloaded <= 0L) throw IllegalStateException("لم يتم تنزيل أي بيانات")
+                        dao.updateDownloadProgress(
+                            videoId = detail.id,
+                            status = DownloadStatus.COMPLETED.name,
+                            progress = 100,
+                            downloaded = downloaded,
+                            total = downloaded
+                        )
+                    } else {
+                        val body = response.body ?: throw IllegalStateException("Empty body")
+                        val totalBytes = body.contentLength().coerceAtLeast(0L)
+                        if (contentType.contains("application/json") || contentType.startsWith("text/html")) {
+                            throw IllegalStateException("الخادم أعاد صفحة أو بيانات API بدل ملف فيديو")
+                        }
+                        body.byteStream().use { input ->
+                            FileOutputStream(targetFile).use { output ->
+                                val buffer = ByteArray(16 * 1024)
+                                var downloaded = 0L
+                                var lastUiUpdate = 0L
+                                while (true) {
+                                    val read = input.read(buffer)
+                                    if (read == -1) break
+                                    output.write(buffer, 0, read)
+                                    downloaded += read
+                                    val now = System.currentTimeMillis()
+                                    if (now - lastUiUpdate >= 250L) {
+                                        lastUiUpdate = now
+                                        val percent = if (totalBytes > 0L) ((downloaded * 100L) / totalBytes).toInt().coerceIn(0, 99) else 25
+                                        dao.updateDownloadProgress(detail.id, DownloadStatus.DOWNLOADING.name, percent, downloaded, totalBytes)
+                                    }
+                                }
+                                output.flush()
+                                if (downloaded <= 0L) throw IllegalStateException("الملف الذي أعاده الخادم فارغ")
+                                val finalTotal = if (totalBytes > 0L) totalBytes else downloaded
+                                dao.updateDownloadProgress(detail.id, DownloadStatus.COMPLETED.name, 100, downloaded, finalTotal)
+                            }
                         }
                     }
                 }
