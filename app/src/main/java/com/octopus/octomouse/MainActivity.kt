@@ -97,9 +97,21 @@ class MainActivity : Activity() {
         window.statusBarColor = bg
         window.navigationBarColor = bg
         buildUi()
+        ensureBluetoothPermissionAndService()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ensureBluetoothPermissionAndService()
+        if (::devices.isInitialized) refreshDevices()
+    }
+
+    private fun ensureBluetoothPermissionAndService() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), 42)
-        } else initializeBluetooth()
+            return
+        }
+        initializeBluetooth()
     }
 
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).roundToInt()
@@ -354,31 +366,68 @@ class MainActivity : Activity() {
     }
 
     private fun initializeBluetooth() {
-        adapter = BluetoothAdapter.getDefaultAdapter()
-        if (adapter == null) { updateStatus("This phone has no Bluetooth adapter"); return }
-        if (adapter?.isEnabled != true) {
-            updateStatus("Turn Bluetooth on, then tap Refresh")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
+            updateStatus("Android 9 or newer is required for Bluetooth HID.")
             return
         }
-        adapter?.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
-            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
-                if (profile != BluetoothProfile.HID_DEVICE) return
-                hid = proxy as BluetoothHidDevice
-                val sdp = BluetoothHidDeviceAppSdpSettings(
-                    "Octo Mouse", "Bluetooth mouse from your phone", "Octopus205",
-                    BluetoothHidDevice.SUBCLASS1_MOUSE, reportDescriptor
-                )
-                hid?.registerApp(sdp, null, null, executor, callback)
-                refreshDevices()
-            }
-            override fun onServiceDisconnected(profile: Int) {
-                hid = null
-                registered = false
-                connected = null
-                updateStatus("Bluetooth HID service disconnected")
-            }
-        }, BluetoothProfile.HID_DEVICE)
-        updateStatus("Preparing Bluetooth mouse service…")
+        if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+            updateStatus("Allow Nearby devices permission to continue.")
+            return
+        }
+        adapter = BluetoothAdapter.getDefaultAdapter()
+        if (adapter == null) {
+            updateStatus("This phone has no Bluetooth adapter.")
+            return
+        }
+        if (adapter?.isEnabled != true) {
+            registered = false
+            updateStatus("Bluetooth is off. Turn it on, then return here.")
+            return
+        }
+        if (hid != null || profileRequestPending) return
+
+        profileRequestPending = true
+        val requestStarted = try {
+            adapter?.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
+                override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                    profileRequestPending = false
+                    if (profile != BluetoothProfile.HID_DEVICE || proxy !is BluetoothHidDevice) {
+                        updateStatus("This phone does not expose the Bluetooth HID Device profile.")
+                        return
+                    }
+                    hid = proxy
+                    val sdp = BluetoothHidDeviceAppSdpSettings(
+                        "Octo Mouse", "Bluetooth mouse from your phone", "Octopus205",
+                        BluetoothHidDevice.SUBCLASS1_MOUSE, reportDescriptor
+                    )
+                    val accepted = try {
+                        proxy.registerApp(sdp, null, null, executor, callback)
+                    } catch (_: SecurityException) {
+                        false
+                    }
+                    updateStatus(if (accepted) "Registering Bluetooth mouse service…" else "HID registration was rejected by Android.")
+                }
+
+                override fun onServiceDisconnected(profile: Int) {
+                    profileRequestPending = false
+                    hid = null
+                    registered = false
+                    connected = null
+                    updateStatus("Bluetooth HID service disconnected. Return to the app to retry.")
+                }
+            }, BluetoothProfile.HID_DEVICE) == true
+        } catch (_: SecurityException) {
+            false
+        } catch (_: Exception) {
+            false
+        }
+
+        if (!requestStarted) {
+            profileRequestPending = false
+            updateStatus("Could not start the Bluetooth HID service on this phone.")
+        } else {
+            updateStatus("Preparing Bluetooth mouse service…")
+        }
     }
 
     private fun refreshDevices() {
