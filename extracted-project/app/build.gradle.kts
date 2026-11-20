@@ -17,7 +17,9 @@ android {
     applicationId = "com.octopus.octotube"
     minSdk = 24
     targetSdk = 36
-    versionCode = 1
+    // CI supplies a monotonically increasing version code for every build.
+    // Local builds remain installable with the initial version code.
+    versionCode = providers.gradleProperty("OCTOTUBE_VERSION_CODE").orNull?.toInt() ?: 1
     versionName = "1.0"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
