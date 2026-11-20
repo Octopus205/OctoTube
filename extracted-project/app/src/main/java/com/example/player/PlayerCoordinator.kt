@@ -11,6 +11,8 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
+import androidx.media3.common.TrackGroup
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -46,6 +48,8 @@ data class ActivePlaybackUiState(
     val bufferedPercent: Int = 0,
     val playbackSpeed: Float = 1.0f,
     val selectedQuality: VideoStreamOption? = null,
+    val availableVideoHeights: List<Int> = emptyList(),
+    val selectedVideoHeight: Int? = null,
     val activeSubtitleCode: String? = null,
     val isAudioOnlyBackgroundMode: Boolean = false,
     val videoSize: VideoSize = VideoSize.UNKNOWN,
@@ -68,6 +72,7 @@ class PlayerCoordinator(
     private var currentSettings: OctoSettings = OctoSettings()
     private var fallbackCandidates: List<VideoStreamOption?> = emptyList()
     private var fallbackIndex: Int = 0
+    private var adaptiveVideoGroups: List<Pair<TrackGroup, Int>> = emptyList()
 
     private val _playerState = MutableStateFlow(ActivePlaybackUiState())
     val playerState: StateFlow<ActivePlaybackUiState> = _playerState.asStateFlow()
@@ -91,6 +96,29 @@ class PlayerCoordinator(
 
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             _playerState.update { it.copy(videoSize = videoSize) }
+        }
+
+        override fun onTracksChanged(tracks: Tracks) {
+            val videoGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_VIDEO }
+            val options = videoGroups.flatMap { group ->
+                (0 until group.length).mapNotNull { index ->
+                    val height = group.getTrackFormat(index).height
+                    if (height > 0 && group.isTrackSupported(index)) height else null
+                }
+            }.distinct().sortedDescending()
+            adaptiveVideoGroups = videoGroups.flatMap { group ->
+                (0 until group.length).mapNotNull { index ->
+                    val height = group.getTrackFormat(index).height
+                    if (height > 0 && group.isTrackSupported(index)) group.mediaTrackGroup to index else null
+                }
+            }
+            val selectedHeight = videoGroups.flatMap { group ->
+                (0 until group.length).filter { group.isTrackSelected(it) }
+                    .map { group.getTrackFormat(it).height }
+            }.firstOrNull { it > 0 }
+            _playerState.update {
+                it.copy(availableVideoHeights = options, selectedVideoHeight = selectedHeight)
+            }
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
@@ -333,6 +361,22 @@ class PlayerCoordinator(
         controller.setMediaItem(mediaItem, resumePos)
         controller.prepare()
         controller.playWhenReady = wasPlaying
+    }
+
+    fun switchAdaptiveQuality(height: Int?) {
+        val controller = mediaController ?: return
+        val matching = height?.let { requested ->
+            adaptiveVideoGroups.firstOrNull { (group, index) ->
+                group.getFormat(index).height == requested
+            }
+        }
+        val builder = controller.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+        if (matching != null) {
+            builder.setOverrideForType(TrackSelectionOverride(matching.first, listOf(matching.second)))
+        }
+        controller.trackSelectionParameters = builder.build()
+        _playerState.update { it.copy(selectedVideoHeight = height) }
     }
 
     fun toggleBackgroundAudioMode(enableAudioOnly: Boolean) {
