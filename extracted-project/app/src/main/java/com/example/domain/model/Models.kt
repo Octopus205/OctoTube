@@ -177,6 +177,7 @@ data class ServiceInstanceHealth(
 
 enum class DownloadFormat(val label: String, val extension: String) {
     VIDEO_MP4("فيديو MP4", "mp4"),
+    VIDEO_HLS_TS("فيديو HLS", "ts"),
     AUDIO_M4A("صوت فقط M4A", "m4a")
 }
 
