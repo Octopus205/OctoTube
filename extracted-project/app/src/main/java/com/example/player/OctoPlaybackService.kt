@@ -24,7 +24,7 @@ class OctoPlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
 
-        val httpFactory = OkHttpDataSource.Factory(NetworkModule.okHttpClient)
+        val httpFactory = OkHttpDataSource.Factory(NetworkModule.mediaOkHttpClient)
         val dataSourceFactory = DefaultDataSource.Factory(this, httpFactory)
 
         val audioAttributes = AudioAttributes.Builder()
