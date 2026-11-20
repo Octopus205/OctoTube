@@ -187,7 +187,8 @@ class PlayerCoordinator(
                 title = detail.title,
                 artist = detail.channelName,
                 artworkUrl = detail.thumbnailUrl,
-                subtitles = detail.subtitles
+                subtitles = detail.subtitles,
+                mimeType = if (playableUri == detail.hlsUrl) MimeTypes.APPLICATION_M3U8 else chosenVideo?.mimeType
             )
             applySubtitleSelection(controller, initialSubCode)
             controller.setMediaItem(mediaItem, startPositionMs)
@@ -283,7 +284,8 @@ class PlayerCoordinator(
             title = detail.title,
             artist = detail.channelName,
             artworkUrl = detail.thumbnailUrl,
-            subtitles = detail.subtitles
+            subtitles = detail.subtitles,
+            mimeType = option.mimeType
         )
         controller.setMediaItem(mediaItem, resumePos)
         controller.prepare()
@@ -448,9 +450,10 @@ class PlayerCoordinator(
     }
 
     private fun pickBestVideoOption(detail: StreamDetail, targetHeight: Int): VideoStreamOption? {
-        val progressive = detail.videoStreams.filter { !it.videoOnly }
-        val pool = progressive.ifEmpty { detail.videoStreams }
-        return pool.minByOrNull { kotlin.math.abs(it.height - targetHeight) }
+        val progressive = detail.videoStreams.filter {
+            !it.videoOnly && it.url.isNotBlank() && it.mimeType.startsWith("video/", ignoreCase = true)
+        }
+        return progressive.minByOrNull { kotlin.math.abs(it.height - targetHeight) }
     }
 
     private fun choosePlayableUri(
@@ -461,10 +464,11 @@ class PlayerCoordinator(
         if (audioOnly) {
             return detail.audioStreams.firstOrNull()?.url ?: chosenVideo?.url ?: detail.hlsUrl
         }
-        if (chosenVideo != null && !chosenVideo.videoOnly) {
-            return chosenVideo.url
-        }
-        return detail.hlsUrl ?: chosenVideo?.url ?: detail.audioStreams.firstOrNull()?.url
+        // Prefer a progressive stream with both audio and video. If none exists,
+        // use the provider's adaptive HLS manifest; never send a video-only URL
+        // to the player as if it contained audio.
+        return chosenVideo?.url?.takeIf { it.isNotBlank() }
+            ?: detail.hlsUrl?.takeIf { it.isNotBlank() }
     }
 
     private fun buildMediaItem(
@@ -473,7 +477,8 @@ class PlayerCoordinator(
         title: String,
         artist: String,
         artworkUrl: String,
-        subtitles: List<SubtitleTrack>
+        subtitles: List<SubtitleTrack>,
+        mimeType: String? = null
     ): MediaItem {
         val subtitleConfigs = subtitles.mapNotNull { track ->
             val resolvedUri = if (track.url == "local://demo/ar") {
@@ -508,9 +513,14 @@ class PlayerCoordinator(
             .setSubtitleConfigurations(subtitleConfigs)
             .apply {
                 val path = Uri.parse(uri).lastPathSegment.orEmpty().lowercase()
+                val declaredMime = mimeType?.substringBefore(";")?.lowercase().orEmpty()
                 when {
-                    path.endsWith(".m3u8") -> setMimeType(MimeTypes.APPLICATION_M3U8)
-                    path.endsWith(".mpd") -> setMimeType(MimeTypes.APPLICATION_MPD)
+                    declaredMime.contains("mpegurl") || declaredMime.contains("vnd.apple") ||
+                        path.endsWith(".m3u8") -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                    declaredMime.contains("dash+xml") || path.endsWith(".mpd") ->
+                        setMimeType(MimeTypes.APPLICATION_MPD)
+                    declaredMime.startsWith("video/") -> setMimeType(declaredMime)
+                    declaredMime.startsWith("audio/") -> setMimeType(declaredMime)
                 }
             }
             .build()
