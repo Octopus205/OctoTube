@@ -59,6 +59,11 @@ jobs:
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "GRADLE_BIN=$GRADLE_BIN" >> "$GITHUB_ENV"
 
+      - name: Run unit tests
+        run: |
+          cd "$PROJECT_DIR"
+          "$GRADLE_BIN" --no-daemon testDebugUnitTest
+
       - name: Build debug APK
         run: |
           cd "$PROJECT_DIR"
