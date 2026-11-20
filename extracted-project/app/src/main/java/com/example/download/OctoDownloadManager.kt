@@ -55,6 +55,14 @@ class OctoDownloadManager(
         return DocumentsContract.createDocument(context.contentResolver, parent, mimeType, name)
     }
 
+    private fun openTargetOutputStream(targetUri: Uri?, fallbackFile: File) =
+        if (targetUri != null) {
+            context.contentResolver.openOutputStream(targetUri, "wt")
+                ?: throw IllegalStateException("تعذر فتح الملف داخل مجلد الحفظ المحدد")
+        } else {
+            FileOutputStream(fallbackFile)
+        }
+
     private fun deleteStoredLocation(location: String) {
         val uri = runCatching { Uri.parse(location) }.getOrNull()
         if (uri?.scheme == "content") {
@@ -158,7 +166,7 @@ class OctoDownloadManager(
                             .map { URI(streamUrl).resolve(it).toString() }.toList()
                         if (segments.isEmpty()) throw IllegalStateException("قائمة HLS لا تحتوي مقاطع فيديو")
                         var downloaded = 0L
-                        (targetUri?.let { context.contentResolver.openOutputStream(it, "wt") } ?: FileOutputStream(targetFile)).use { output ->
+                        openTargetOutputStream(targetUri, targetFile).use { output ->
                             segments.forEachIndexed { index, segmentUrl ->
                                 val segmentRequest = Request.Builder().url(segmentUrl).get().build()
                                 val segmentCall = NetworkModule.downloadOkHttpClient.newCall(segmentRequest)
