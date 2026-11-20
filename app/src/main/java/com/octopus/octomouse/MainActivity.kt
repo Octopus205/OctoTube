@@ -190,7 +190,7 @@ class MainActivity : Activity() {
         addGap(connectionCard, 10)
         val pairRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val pairSettings = makeButton("Pair new device")
-        pairSettings.setOnClickListener { openBluetoothSettings() }
+        pairSettings.setOnClickListener { startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) }
         pairRow.addView(pairSettings, LinearLayout.LayoutParams(0, dp(54), 1f).apply { marginEnd = dp(8) })
         val discoverable = makeButton("Make visible", blue, true)
         discoverable.setOnClickListener { requestDiscoverable() }
@@ -216,7 +216,7 @@ class MainActivity : Activity() {
         controlCard.addView(sectionTitle("Mouse control"))
         controlCard.addView(label("Move one finger to move the pointer. Tap to click.", 12f, textMuted))
         addGap(controlCard, 12)
-        pad = TouchSurface(this) { dx, dy, wheel -> sendMouse(dx, dy, wheel) }.apply {
+        pad = TouchSurface(this) { dx, dy, wheel -> sendMouse((dx * sensitivity).roundToInt(), (dy * sensitivity).roundToInt(), wheel) }.apply {
             background = rounded(raised, 22, 0xFF334A70.toInt())
             contentDescription = "Touchpad. Drag to move, tap to left click, two-finger tap for right click, two-finger drag to scroll."
         }
@@ -301,11 +301,6 @@ class MainActivity : Activity() {
         setContentView(scroll)
         refreshButtons()
         refreshDevices()
-    }
-
-    private fun openBluetoothSettings() {
-        try { startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE).apply { putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 180) }) }
-        catch (_: Exception) { startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)) }
     }
 
     private fun requestDiscoverable() {
