@@ -35,6 +35,8 @@ import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.ClosedCaptionOff
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.FastForward
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.HighQuality
@@ -163,6 +165,7 @@ fun PlayerScreen(
     var showDownloadSheet by remember { mutableStateOf(false) }
     var showSpeedSheet by remember { mutableStateOf(false) }
     var descriptionExpanded by remember { mutableStateOf(false) }
+    var isFullScreen by remember { mutableStateOf(false) }
 
     val shouldAutoPip = settings.autoPipEnabled &&
         playbackState.isPlaying &&
@@ -231,10 +234,11 @@ fun PlayerScreen(
     ) {
         // Cinema Player Box
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(16f / 9f)
-                .background(Color.Black)
+            modifier = if (isFullScreen) {
+                Modifier.fillMaxSize().background(Color.Black)
+            } else {
+                Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)
+            }
                 .then(pipModifier)
                 .clickable { showControls = !showControls }
         ) {
@@ -394,6 +398,18 @@ fun PlayerScreen(
                                     tint = Color.White
                                 )
                             }
+                            IconButton(
+                                onClick = { isFullScreen = !isFullScreen },
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("player_fullscreen_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isFullScreen) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                                    contentDescription = if (isFullScreen) "إنهاء ملء الشاشة" else "ملء الشاشة",
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
 
@@ -502,6 +518,8 @@ fun PlayerScreen(
             }
         }
 
+        // Keep the video surface edge-to-edge while fullscreen is active.
+        if (!isFullScreen) {
         // Scrollable Details Area
         when (extractState) {
             is UiLoadState.Loading -> {
@@ -816,6 +834,7 @@ fun PlayerScreen(
                 }
             }
         }
+        }
     }
 
     // Quality Sheet
@@ -932,8 +951,17 @@ fun PlayerScreen(
         ModalBottomSheet(onDismissRequest = { showDownloadSheet = false }) {
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("تحميل للمشاهدة بدون إنترنت", style = MaterialTheme.typography.titleLarge)
-                val videoOpts = stream.videoStreams.filter { !it.videoOnly }.ifEmpty { stream.videoStreams }
-                videoOpts.take(3).forEach { opt ->
+                val videoOpts = stream.videoStreams.filter {
+                    !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                }
+                if (videoOpts.isEmpty()) {
+                    Text(
+                        "لا يوجد رابط MP4 مباشر لهذا الفيديو. قد يوفر الخادم بث HLS فقط، وهذا النوع يحتاج مدير تنزيل مخصصًا.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                videoOpts.take(5).forEach { opt ->
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -960,6 +988,10 @@ fun PlayerScreen(
                         }
                     }
                 }
+                if (stream.audioStreams.any {
+                    it.mimeType.contains("audio/mp4", ignoreCase = true) ||
+                        it.mimeType.contains("audio/aac", ignoreCase = true)
+                }) {
                 Surface(
                     shape = MaterialTheme.shapes.medium,
                     color = MaterialTheme.colorScheme.secondaryContainer,
@@ -985,6 +1017,7 @@ fun PlayerScreen(
                         }
                         Icon(Icons.Filled.Download, contentDescription = null)
                     }
+                }
                 }
                 Spacer(modifier = Modifier.height(16.dp))
             }
