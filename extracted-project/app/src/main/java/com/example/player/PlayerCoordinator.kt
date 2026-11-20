@@ -92,10 +92,16 @@ class PlayerCoordinator(
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            val cause = error.cause?.message?.takeIf { it.isNotBlank() }
             _playerState.update {
                 it.copy(
-                    errorMessage = "تعذر تشغيل البث (${error.errorCodeName}). يمكنك تبديل الجودة أو الخادم.",
-                    isBuffering = false
+                    errorMessage = buildString {
+                        append("فشل تشغيل الفيديو: ${error.errorCodeName}")
+                        if (cause != null) append(" — ").append(cause.take(140))
+                        append(". جرّب جودة أخرى أو خادمًا مختلفًا.")
+                    },
+                    isBuffering = false,
+                    isPlaying = false
                 )
             }
         }
@@ -108,12 +114,20 @@ class PlayerCoordinator(
         controllerFuture = future
         future.addListener(
             {
-                runCatching {
+                try {
                     val controller = future.get()
                     mediaController = controller
                     controller.addListener(playerListener)
                     _controllerFlow.value = controller
                     startTicker()
+                } catch (error: Exception) {
+                    controllerFuture = null
+                    _playerState.update {
+                        it.copy(
+                            isBuffering = false,
+                            errorMessage = "تعذر تهيئة مشغل الفيديو: ${error.cause?.message ?: error.message ?: "خطأ غير معروف"}"
+                        )
+                    }
                 }
             },
             ContextCompat.getMainExecutor(appContext)
@@ -136,7 +150,16 @@ class PlayerCoordinator(
         val preferredHeight = Regex("(\\d+)").find(settings.preferredQuality)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 720
         val chosenVideo = pickBestVideoOption(detail, preferredHeight)
         val playableUri = choosePlayableUri(detail, chosenVideo, audioOnly = false)
-            ?: return
+        if (playableUri.isNullOrBlank()) {
+            _playerState.update {
+                it.copy(
+                    currentStream = detail,
+                    isBuffering = false,
+                    errorMessage = "الخادم لم يُرجع رابط فيديو صالحًا. جرّب تبديل الخادم من تبويب الخدمات."
+                )
+            }
+            return
+        }
 
         val initialSubCode = if (settings.subtitlesAutoEnable) {
             detail.subtitles.firstOrNull {
@@ -483,6 +506,13 @@ class PlayerCoordinator(
             .setUri(uri)
             .setMediaMetadata(metadata)
             .setSubtitleConfigurations(subtitleConfigs)
+            .apply {
+                val path = Uri.parse(uri).lastPathSegment.orEmpty().lowercase()
+                when {
+                    path.endsWith(".m3u8") -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                    path.endsWith(".mpd") -> setMimeType(MimeTypes.APPLICATION_MPD)
+                }
+            }
             .build()
     }
 
