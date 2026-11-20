@@ -271,8 +271,16 @@ class PlayerCoordinator(
     fun playOfflineTask(task: DownloadTask) {
         connect()
         lastSkippedUuid = null
+        val storedUri = runCatching { Uri.parse(task.localFilePath) }.getOrNull()
+        val isContentUri = storedUri?.scheme == "content"
         val file = File(task.localFilePath)
-        if (!file.exists()) {
+        if (isContentUri) {
+            val canRead = runCatching { appContext.contentResolver.openFileDescriptor(storedUri!!, "r")?.use { true } ?: false }.getOrDefault(false)
+            if (!canRead) {
+                _playerState.update { it.copy(errorMessage = "الملف المحمل غير موجود أو لم يعد المجلد متاحًا") }
+                return
+            }
+        } else if (!file.exists()) {
             _playerState.update { it.copy(errorMessage = "الملف المحمل غير موجود على الجهاز") }
             return
         }
@@ -322,7 +330,7 @@ class PlayerCoordinator(
         scope.launch {
             val controller = awaitController() ?: return@launch
             val mediaItem = buildMediaItem(
-                uri = Uri.fromFile(file).toString(),
+                uri = if (isContentUri) storedUri.toString() else Uri.fromFile(file).toString(),
                 id = task.videoId,
                 title = task.title,
                 artist = task.channelName,
