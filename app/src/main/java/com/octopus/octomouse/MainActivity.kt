@@ -37,7 +37,10 @@ class MainActivity : Activity() {
     private var hid: BluetoothHidDevice? = null
     private var connected: BluetoothDevice? = null
     private var registered = false
+    private var profileRequestPending = false
     private var sensitivity = 1.5f
+    private var scrollSensitivity = 1.0f
+    private var hapticsEnabled = true
     private lateinit var status: TextView
     private lateinit var statusPill: TextView
     private lateinit var devices: Spinner
