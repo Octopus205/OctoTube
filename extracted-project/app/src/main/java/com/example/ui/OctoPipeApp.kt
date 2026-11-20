@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudQueue
 import androidx.compose.material.icons.filled.Download
@@ -35,6 +36,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -42,7 +44,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -202,6 +206,7 @@ fun OctoPipeApp(
                     }
                 }
             ) { innerPadding ->
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -244,17 +249,18 @@ fun OctoPipeApp(
                         }
                     }
 
-                    Box(
+                    Column(
                         modifier = Modifier
                             .weight(1f)
-                            .fillMaxHeight(),
-                        contentAlignment = Alignment.TopCenter
+                            .fillMaxHeight()
                     ) {
+                        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
                         NavHost(
                             navController = navController,
                             startDestination = DiscoverRoute,
                             modifier = Modifier
-                                .fillMaxSize()
+                                .weight(1f)
+                                .fillMaxWidth()
                                 .widthIn(max = if (isPlayerScreen || isInPipMode) 1200.dp else 840.dp)
                         ) {
                             composable<DiscoverRoute> {
@@ -419,7 +425,20 @@ fun OctoPipeApp(
                                 )
                             }
                         }
+                        }
+                        if (useRail && !isPlayerScreen && !isInPipMode && playbackState.currentStream != null) {
+                            MiniPlayerBar(
+                                playbackState = playbackState,
+                                onExpand = {
+                                    val active = playbackState.currentStream ?: return@MiniPlayerBar
+                                    navController.navigate(PlayerRoute(active.id, active.serviceProvider.id))
+                                },
+                                onTogglePlayPause = { viewModel.playerCoordinator.togglePlayPause() },
+                                onClose = { viewModel.playerCoordinator.stopAndClear() }
+                            )
+                        }
                     }
+                }
                 }
             }
         }
