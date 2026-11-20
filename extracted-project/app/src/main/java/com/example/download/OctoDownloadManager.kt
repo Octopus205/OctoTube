@@ -80,8 +80,18 @@ class OctoDownloadManager(
     ) {
         activeJobs[detail.id]?.cancel()
 
-        val safeName = detail.id.replace(Regex("[^A-Za-z0-9_-]"), "_")
-        val targetFile = File(getDownloadsDir(), "${safeName}_${format.extension}.${format.extension}")
+        val safeTitle = detail.title
+            .replace(Regex("[\\\\/:*?\"<>|\\\\x00-\\\\x1F]"), "")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .take(110)
+            .ifBlank { "OctoTube_${detail.id}" }
+        val qualitySuffix = qualityLabel
+            .replace(Regex("[^A-Za-z0-9p._-]"), "")
+            .takeIf { it.isNotBlank() }
+            ?.let { "_$it" }.orEmpty()
+        val outputName = "${safeTitle}${qualitySuffix}.${format.extension}"
+        val targetFile = File(getDownloadsDir(), outputName)
         val selectedFolder = selectedFolderUri()
         val mimeType = when (format) {
             DownloadFormat.VIDEO_HLS_TS -> "video/mp2t"
@@ -96,7 +106,7 @@ class OctoDownloadManager(
         val job = scope.launch {
             val targetUri = selectedFolder?.let {
                 runCatching {
-                    createTargetDocument(it, "${safeName}_${format.extension}.${format.extension}", mimeType)
+                    createTargetDocument(it, outputName, mimeType)
                 }.getOrNull()
             }
             if (selectedFolder != null && targetUri == null) {
