@@ -36,3 +36,7 @@ The debug APK is generated at `app/build/outputs/apk/debug/app-debug.apk`. GitHu
 ## Technical reference
 - [Android BluetoothHidDevice API](https://developer.android.com/reference/android/bluetooth/BluetoothHidDevice)
 - [Android BluetoothAdapter API](https://developer.android.com/reference/android/bluetooth/BluetoothAdapter)
+
+
+## Important runtime behavior
+Android automatically unregisters a Bluetooth HID Device app when it is no longer in the foreground. Keep Octo Mouse open on screen while controlling the target device. The app requests the HID profile, registers its mouse descriptor, and sends standard mouse input reports after the host has paired with the phone and the HID connection is active. A successful APK build does not prove that a particular phone firmware exposes the HID Device profile; verify this on the intended phone.
