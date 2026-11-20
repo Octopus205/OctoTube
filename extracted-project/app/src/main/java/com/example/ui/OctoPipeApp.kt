@@ -365,6 +365,9 @@ fun OctoPipeApp(
                                     isSubscribed = isSubscribed,
                                     isInPipMode = isInPipMode,
                                     onBack = { navController.popBackStack() },
+                                    onRetryPlayback = {
+                                        viewModel.loadVideoForPlayback(route.videoId, provider)
+                                    },
                                     onMinimizeToBackground = {
                                         viewModel.showToast("يستمر الصوت في الخلفية عبر شريط الإشعارات")
                                         navController.popBackStack()
