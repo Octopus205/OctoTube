@@ -1065,7 +1065,7 @@ fun PlayerScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                videoOpts.take(5).forEach { opt ->
+                videoOpts.forEach { opt ->
                     Surface(
                         shape = MaterialTheme.shapes.medium,
                         color = MaterialTheme.colorScheme.surfaceVariant,
