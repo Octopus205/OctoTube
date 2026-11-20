@@ -76,7 +76,7 @@ fun DownloadsScreen(
     val filtered = remember(downloads, selectedFilter) {
         when (selectedFilter) {
             DownloadFilter.ALL -> downloads
-            DownloadFilter.VIDEO -> downloads.filter { it.format == DownloadFormat.VIDEO_MP4 }
+            DownloadFilter.VIDEO -> downloads.filter { it.format == DownloadFormat.VIDEO_MP4 || it.format == DownloadFormat.VIDEO_HLS_TS }
             DownloadFilter.AUDIO -> downloads.filter { it.format == DownloadFormat.AUDIO_M4A }
             DownloadFilter.ACTIVE -> downloads.filter {
                 it.status == DownloadStatus.DOWNLOADING || it.status == DownloadStatus.QUEUED
