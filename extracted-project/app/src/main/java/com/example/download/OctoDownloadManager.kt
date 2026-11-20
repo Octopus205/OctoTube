@@ -201,7 +201,7 @@ class OctoDownloadManager(
                             throw IllegalStateException("الخادم أعاد صفحة أو بيانات API بدل ملف فيديو")
                         }
                         body.byteStream().use { input ->
-                            FileOutputStream(targetFile).use { output ->
+                            (targetUri?.let { context.contentResolver.openOutputStream(it, "wt") } ?: FileOutputStream(targetFile)).use { output ->
                                 val buffer = ByteArray(16 * 1024)
                                 var downloaded = 0L
                                 var lastUiUpdate = 0L
@@ -230,8 +230,8 @@ class OctoDownloadManager(
                     videoId = detail.id,
                     status = DownloadStatus.PAUSED.name,
                     progress = 0,
-                    downloaded = targetFile.length(),
-                    total = targetFile.length()
+                    downloaded = if (targetUri == null) targetFile.length() else 0L,
+                    total = if (targetUri == null) targetFile.length() else 0L
                 )
             } catch (_: Exception) {
                 if (targetUri != null) runCatching { context.contentResolver.delete(targetUri, null, null) } else runCatching { targetFile.delete() }
