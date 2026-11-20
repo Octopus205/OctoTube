@@ -276,6 +276,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun setDownloadFolder(uri: Uri) {
+        runCatching { downloadManager.setDownloadFolder(uri) }
+            .onSuccess { _toastMessage.value = "تم تحديد مجلد التنزيلات" }
+            .onFailure { _toastMessage.value = "تعذر حفظ صلاحية مجلد التنزيلات" }
+    }
+
     fun startDownload(detail: StreamDetail, format: DownloadFormat, chosenVideo: VideoStreamOption?) {
         val effectiveFormat = if (
             format == DownloadFormat.VIDEO_MP4 &&
