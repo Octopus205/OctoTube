@@ -901,7 +901,10 @@ fun PlayerScreen(
                 Text("اختر جودة الفيديو", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(10.dp))
                 val options = stream.videoStreams.filter {
-                    !it.videoOnly && it.mimeType.startsWith("video/", ignoreCase = true)
+                    !it.videoOnly && (
+                        it.mimeType.startsWith("video/", ignoreCase = true) ||
+                            it.mimeType.contains("mpegurl", ignoreCase = true)
+                    )
                 }
                 if (playbackState.availableVideoHeights.isNotEmpty()) {
                     Row(
@@ -1050,11 +1053,14 @@ fun PlayerScreen(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("تحميل للمشاهدة بدون إنترنت", style = MaterialTheme.typography.titleLarge)
                 val videoOpts = stream.videoStreams.filter {
-                    !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                    !it.videoOnly && (
+                        it.mimeType.contains("video/mp4", ignoreCase = true) ||
+                            it.mimeType.contains("mpegurl", ignoreCase = true)
+                    )
                 }
                 if (videoOpts.isEmpty()) {
                     Text(
-                        "لا يوجد رابط MP4 مباشر لهذا الفيديو. قد يوفر الخادم بث HLS فقط، وهذا النوع يحتاج مدير تنزيل مخصصًا.",
+                        "لا توجد جودة قابلة للتنزيل لهذا الفيديو من الخادم الحالي. جرّب مصدرًا آخر.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1077,7 +1083,7 @@ fun PlayerScreen(
                         ) {
                             Icon(Icons.Filled.Videocam, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("فيديو MP4 • ${opt.qualityLabel}", style = MaterialTheme.typography.titleSmall)
+                                Text("${if (opt.mimeType.contains("mpegurl", true)) "فيديو HLS" else "فيديو MP4"} • ${opt.qualityLabel}", style = MaterialTheme.typography.titleSmall)
                                 if (opt.contentLength > 0) {
                                     Text(OctoFormatters.formatBytes(opt.contentLength), style = MaterialTheme.typography.bodySmall)
                                 }
