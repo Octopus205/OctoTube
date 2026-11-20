@@ -239,7 +239,7 @@ class MainActivity : Activity() {
         leftButton = makeButton("◉  Left click", blue, true)
         leftButton.setOnTouchListener { v, event ->
             when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> { buttonDown(1); v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); true }
+                MotionEvent.ACTION_DOWN -> { buttonDown(1); if (hapticsEnabled) v.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP); true }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { buttonUp(); true }
                 else -> true
             }
@@ -293,6 +293,41 @@ class MainActivity : Activity() {
         sensitivity = getSharedPreferences("octo_mouse", MODE_PRIVATE).getFloat("sensitivity", 1.5f).coerceIn(0.5f, 4f)
         speed.progress = ((sensitivity - 0.5f) * 10f).roundToInt()
         settingsCard.addView(speed)
+        addGap(settingsCard, 12)
+        val scrollHeader = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        scrollHeader.addView(label("Scroll speed", 14f, textMain, true), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        val scrollValue = label("1.0×", 13f, blue, true)
+        scrollHeader.addView(scrollValue)
+        settingsCard.addView(scrollHeader)
+        val scrollSpeed = SeekBar(this).apply {
+            max = 25
+            progressTintList = android.content.res.ColorStateList.valueOf(blue)
+            thumbTintList = android.content.res.ColorStateList.valueOf(blue)
+            setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                    scrollSensitivity = 0.5f + progress / 10f
+                    scrollValue.text = String.format("%.1f×", scrollSensitivity)
+                    getSharedPreferences("octo_mouse", MODE_PRIVATE).edit().putFloat("scroll_sensitivity", scrollSensitivity).apply()
+                }
+                override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+                override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+            })
+        }
+        scrollSensitivity = getSharedPreferences("octo_mouse", MODE_PRIVATE).getFloat("scroll_sensitivity", 1.0f).coerceIn(0.5f, 3f)
+        scrollSpeed.progress = ((scrollSensitivity - 0.5f) * 10f).roundToInt()
+        settingsCard.addView(scrollSpeed)
+        val hapticSwitch = android.widget.Switch(this).apply {
+            text = "Touch feedback"
+            textSize = 14f
+            setTextColor(textMain)
+            isChecked = getSharedPreferences("octo_mouse", MODE_PRIVATE).getBoolean("haptics", true)
+            hapticsEnabled = isChecked
+            setOnCheckedChangeListener { _, checked ->
+                hapticsEnabled = checked
+                getSharedPreferences("octo_mouse", MODE_PRIVATE).edit().putBoolean("haptics", checked).apply()
+            }
+        }
+        settingsCard.addView(hapticSwitch)
         addGap(settingsCard, 8)
         settingsCard.addView(label("Gestures", 13f, textMain, true))
         settingsCard.addView(label("• One-finger drag: move pointer\n• One-finger tap: left click\n• Two-finger tap: right click\n• Two-finger drag: scroll vertically", 12f, textMuted).apply { setLineSpacing(dp(3).toFloat(), 1f) })
@@ -373,8 +408,20 @@ class MainActivity : Activity() {
 
     private fun sendMouse(dx: Int, dy: Int, wheel: Int) {
         val device = connected ?: return
-        val report = byteArrayOf(0, dx.coerceIn(-127,127).toByte(), dy.coerceIn(-127,127).toByte(), wheel.coerceIn(-127,127).toByte())
-        try { hid?.sendReport(device, 0, report) } catch (_: SecurityException) { }
+        var remainingX = dx
+        var remainingY = dy
+        var remainingWheel = wheel
+        try {
+            do {
+                val stepX = remainingX.coerceIn(-127, 127)
+                val stepY = remainingY.coerceIn(-127, 127)
+                val stepWheel = remainingWheel.coerceIn(-127, 127)
+                hid?.sendReport(device, 0, byteArrayOf(0, stepX.toByte(), stepY.toByte(), stepWheel.toByte()))
+                remainingX -= stepX
+                remainingY -= stepY
+                remainingWheel -= stepWheel
+            } while (remainingX != 0 || remainingY != 0 || remainingWheel != 0)
+        } catch (_: SecurityException) { updateStatus("Bluetooth permission is required to send mouse input.") }
     }
 
     private fun buttonDown(button: Int) {
@@ -457,7 +504,7 @@ class MainActivity : Activity() {
                     if (twoFinger && event.pointerCount >= 2) {
                         val centerY = (event.getY(0) + event.getY(1)) / 2f
                         val delta = (lastMultiY - centerY).roundToInt()
-                        if (kotlin.math.abs(delta) > 1) move(0, 0, (delta * 0.7f).roundToInt().coerceIn(-12, 12))
+                        if (kotlin.math.abs(delta) > 1) move(0, 0, ((delta * 0.7f) * ((context as? MainActivity)?.scrollSensitivity ?: 1.0f)).roundToInt().coerceIn(-127, 127))
                         lastMultiY = centerY
                         moved = moved || kotlin.math.abs(centerY - downY) > 12
                     } else if (!twoFinger) {
