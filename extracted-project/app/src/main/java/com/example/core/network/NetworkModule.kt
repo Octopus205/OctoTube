@@ -15,12 +15,19 @@ object NetworkModule {
         coerceInputValues = true
     }
 
-    private fun createHttpClient(acceptHeader: String): OkHttpClient =
+    private fun createHttpClient(
+        acceptHeader: String,
+        callTimeoutSeconds: Long? = 60L
+    ): OkHttpClient =
         OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
-            .callTimeout(60, TimeUnit.SECONDS)
+            .apply {
+                if (callTimeoutSeconds != null) {
+                    callTimeout(callTimeoutSeconds, TimeUnit.SECONDS)
+                }
+            }
             .followRedirects(true)
             .followSslRedirects(true)
             .addInterceptor { chain ->
@@ -37,6 +44,11 @@ object NetworkModule {
 
     // ExoPlayer requests video/audio segments and manifests, not JSON documents.
     val mediaOkHttpClient: OkHttpClient by lazy { createHttpClient("*/*") }
+
+    // Long-running downloads must not be cut off by the per-request media timeout.
+    val downloadOkHttpClient: OkHttpClient by lazy {
+        createHttpClient("*/*", callTimeoutSeconds = null)
+    }
 
     suspend fun getString(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().build()
