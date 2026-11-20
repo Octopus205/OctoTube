@@ -843,9 +843,18 @@ fun PlayerScreen(
             Column(modifier = Modifier.padding(16.dp)) {
                 Text("اختر جودة الفيديو", style = MaterialTheme.typography.titleLarge)
                 Spacer(modifier = Modifier.height(10.dp))
-                val options = stream.videoStreams.filter { !it.videoOnly }.ifEmpty { stream.videoStreams }
+                val options = stream.videoStreams.filter {
+                    !it.videoOnly && it.mimeType.startsWith("video/", ignoreCase = true)
+                }
                 if (options.isEmpty()) {
-                    Text("يتم التشغيل عبر البث التكيفي HLS التلقائي", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        if (!stream.hlsUrl.isNullOrBlank()) {
+                            "لا توجد روابط جودة مباشرة؛ يتم استخدام البث التكيفي HLS تلقائيًا."
+                        } else {
+                            "الخادم لم يوفر مسار فيديو يحتوي على الصوت والصورة."
+                        },
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 } else {
                     options.forEach { opt ->
                         Row(
