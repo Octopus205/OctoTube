@@ -15,6 +15,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.Request
+import okhttp3.Call
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -25,6 +26,7 @@ class OctoDownloadManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val activeJobs = ConcurrentHashMap<String, Job>()
+    private val activeCalls = ConcurrentHashMap<String, Call>()
 
     private fun getDownloadsDir(): File {
         val base = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
@@ -76,7 +78,9 @@ class OctoDownloadManager(
                 }
 
                 val request = Request.Builder().url(streamUrl).get().build()
-                NetworkModule.mediaOkHttpClient.newCall(request).execute().use { response ->
+                val call = NetworkModule.downloadOkHttpClient.newCall(request)
+                activeCalls[detail.id] = call
+                call.execute().use { response ->
                     if (!response.isSuccessful) {
                         throw IllegalStateException("HTTP ${response.code}")
                     }
@@ -151,6 +155,7 @@ class OctoDownloadManager(
                     total = 0L
                 )
             } finally {
+                activeCalls.remove(detail.id)
                 activeJobs.remove(detail.id)
             }
         }
@@ -158,6 +163,7 @@ class OctoDownloadManager(
     }
 
     fun cancelDownload(videoId: String) {
+        activeCalls[videoId]?.cancel()
         activeJobs[videoId]?.cancel()
         activeJobs.remove(videoId)
         scope.launch {
@@ -172,6 +178,7 @@ class OctoDownloadManager(
     }
 
     fun deleteDownload(videoId: String) {
+        activeCalls[videoId]?.cancel()
         activeJobs[videoId]?.cancel()
         activeJobs.remove(videoId)
         scope.launch {
