@@ -195,9 +195,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun loadVideoForPlayback(videoId: String, provider: ServiceProvider, startPosMs: Long = 0L) {
+    fun loadVideoForPlayback(
+        videoId: String,
+        provider: ServiceProvider,
+        startPosMs: Long = 0L,
+        forceReload: Boolean = false
+    ) {
         val currentPlaying = playbackState.value.currentStream
-        if (currentPlaying?.id == videoId) {
+        if (!forceReload && currentPlaying?.id == videoId) {
             _playerExtractState.value = UiLoadState.Success(currentPlaying)
             return
         }
