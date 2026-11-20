@@ -143,14 +143,10 @@ class OctoExtractorEngine(
                 val segments = sponsorJob.await()
                 // Invidious instances sometimes expose HLS playback but no progressive MP4
                 // formats. Ask Piped for direct downloadable formats as a secondary source.
-                val enrichedDetail = if (
-                    provider == ServiceProvider.INVIDIOUS &&
-                    detail.videoStreams.none {
-                        !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
-                    }
-                ) {
+                val enrichedDetail = if (provider == ServiceProvider.INVIDIOUS) {
                     var directFormats = emptyList<com.example.domain.model.VideoStreamOption>()
                     var directAudio = emptyList<com.example.domain.model.AudioStreamOption>()
+                    var pipedHlsUrl: String? = null
                     for (pipedUrl in buildInstanceList(ServiceProvider.PIPED, settings)) {
                         try {
                             val pipedDetail = piped.getStreamDetail(pipedUrl, videoId)
@@ -158,12 +154,14 @@ class OctoExtractorEngine(
                                 !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
                             }
                             directAudio = pipedDetail.audioStreams
-                            if (directFormats.isNotEmpty()) break
+                            pipedHlsUrl = pipedDetail.hlsUrl
+                            if (directFormats.isNotEmpty() || !pipedHlsUrl.isNullOrBlank()) break
                         } catch (_: Exception) {
                         }
                     }
-                    if (directFormats.isNotEmpty()) {
+                    if (directFormats.isNotEmpty() || !pipedHlsUrl.isNullOrBlank()) {
                         detail.copy(
+                            hlsUrl = detail.hlsUrl ?: pipedHlsUrl,
                             videoStreams = (detail.videoStreams + directFormats).distinctBy { it.url },
                             audioStreams = (detail.audioStreams + directAudio).distinctBy { it.url }
                         )
