@@ -154,6 +154,7 @@ fun PlayerScreen(
     onSeekTo: (Long) -> Unit,
     onSeekBy: (Long) -> Unit,
     onSelectQuality: (VideoStreamOption) -> Unit,
+    onSelectAdaptiveQuality: (Int?) -> Unit,
     onSelectSubtitle: (String?) -> Unit,
     onSetSpeed: (Float) -> Unit,
     onToggleAudioOnlyMode: (Boolean) -> Unit,
@@ -879,7 +880,39 @@ fun PlayerScreen(
                 val options = stream.videoStreams.filter {
                     !it.videoOnly && it.mimeType.startsWith("video/", ignoreCase = true)
                 }
-                if (options.isEmpty()) {
+                if (playbackState.availableVideoHeights.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            onSelectAdaptiveQuality(null)
+                            showQualitySheet = false
+                        }.padding(vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("تلقائي (Auto)")
+                        if (playbackState.selectedVideoHeight == null) {
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = OctoTeal)
+                        }
+                    }
+                    HorizontalDivider()
+                    playbackState.availableVideoHeights.forEach { height ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                onSelectAdaptiveQuality(height)
+                                showQualitySheet = false
+                            }.padding(vertical = 12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("${height}p • بث تكيفي")
+                            if (playbackState.selectedVideoHeight == height) {
+                                Icon(Icons.Filled.Check, contentDescription = null, tint = OctoTeal)
+                            }
+                        }
+                        HorizontalDivider()
+                    }
+                }
+                if (options.isEmpty() && playbackState.availableVideoHeights.isEmpty()) {
                     Text(
                         if (!stream.hlsUrl.isNullOrBlank()) {
                             "لا توجد روابط جودة مباشرة؛ يتم استخدام البث التكيفي HLS تلقائيًا."
