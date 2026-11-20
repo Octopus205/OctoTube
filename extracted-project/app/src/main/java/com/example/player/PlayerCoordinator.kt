@@ -66,6 +66,8 @@ class PlayerCoordinator(
     private var tickerJob: Job? = null
     private var lastSkippedUuid: String? = null
     private var currentSettings: OctoSettings = OctoSettings()
+    private var fallbackCandidates: List<VideoStreamOption?> = emptyList()
+    private var fallbackIndex: Int = 0
 
     private val _playerState = MutableStateFlow(ActivePlaybackUiState())
     val playerState: StateFlow<ActivePlaybackUiState> = _playerState.asStateFlow()
@@ -92,13 +94,45 @@ class PlayerCoordinator(
         }
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            val stream = _playerState.value.currentStream
+            val nextIndex = fallbackIndex + 1
+            if (stream != null && nextIndex < fallbackCandidates.size) {
+                fallbackIndex = nextIndex
+                val nextOption = fallbackCandidates[nextIndex]
+                val nextUrl = nextOption?.url ?: stream.hlsUrl
+                val controller = mediaController
+                if (!nextUrl.isNullOrBlank() && controller != null) {
+                    _playerState.update {
+                        it.copy(
+                            selectedQuality = nextOption,
+                            isBuffering = true,
+                            isPlaying = false,
+                            errorMessage = "تعذر تشغيل المسار السابق؛ جارٍ تجربة جودة/مسار بديل…"
+                        )
+                    }
+                    val item = buildMediaItem(
+                        uri = nextUrl,
+                        id = stream.id,
+                        title = stream.title,
+                        artist = stream.channelName,
+                        artworkUrl = stream.thumbnailUrl,
+                        subtitles = stream.subtitles,
+                        mimeType = nextOption?.mimeType ?: MimeTypes.APPLICATION_M3U8
+                    )
+                    controller.setMediaItem(item, controller.currentPosition.coerceAtLeast(0L))
+                    controller.prepare()
+                    controller.playWhenReady = true
+                    return
+                }
+            }
+
             val cause = error.cause?.message?.takeIf { it.isNotBlank() }
             _playerState.update {
                 it.copy(
                     errorMessage = buildString {
-                        append("فشل تشغيل الفيديو: ${error.errorCodeName}")
+                        append("فشل تشغيل جميع مسارات الفيديو المتاحة: ${error.errorCodeName}")
                         if (cause != null) append(" — ").append(cause.take(140))
-                        append(". جرّب جودة أخرى أو خادمًا مختلفًا.")
+                        append(". جرّب خادمًا آخر أو أعد المحاولة لاحقًا.")
                     },
                     isBuffering = false,
                     isPlaying = false
@@ -149,6 +183,15 @@ class PlayerCoordinator(
 
         val preferredHeight = Regex("(\\d+)").find(settings.preferredQuality)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: 720
         val chosenVideo = pickBestVideoOption(detail, preferredHeight)
+        val progressiveOptions = detail.videoStreams
+            .filter { !it.videoOnly && it.url.isNotBlank() && it.mimeType.startsWith("video/", true) }
+            .sortedBy { kotlin.math.abs(it.height - preferredHeight) }
+        fallbackCandidates = buildList {
+            chosenVideo?.let { add(it) }
+            progressiveOptions.forEach { if (it.url != chosenVideo?.url) add(it) }
+            if (!detail.hlsUrl.isNullOrBlank()) add(null)
+        }.distinctBy { it?.url ?: detail.hlsUrl }
+        fallbackIndex = 0
         val playableUri = choosePlayableUri(detail, chosenVideo, audioOnly = false)
         if (playableUri.isNullOrBlank()) {
             _playerState.update {
