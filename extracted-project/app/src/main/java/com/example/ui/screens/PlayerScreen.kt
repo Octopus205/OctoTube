@@ -66,6 +66,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -147,6 +148,7 @@ fun PlayerScreen(
     isSubscribed: Boolean,
     isInPipMode: Boolean,
     onBack: () -> Unit,
+    onRetryPlayback: () -> Unit,
     onMinimizeToBackground: () -> Unit,
     onTogglePlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -611,6 +613,14 @@ fun PlayerScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.error
                                 )
+                            }
+                            if (playbackState.errorMessage != null) {
+                                TextButton(
+                                    onClick = onRetryPlayback,
+                                    modifier = Modifier.testTag("player_retry_button")
+                                ) {
+                                    Text("إعادة محاولة التشغيل")
+                                }
                             }
                         }
                     }
