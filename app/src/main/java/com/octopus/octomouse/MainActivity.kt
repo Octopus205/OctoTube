@@ -145,7 +145,7 @@ class MainActivity : Activity() {
 
     private fun buildUi() {
         val scroll = ScrollView(this).apply {
-            fillViewport = true
+            setFillViewport(true)
             clipToPadding = false
             isVerticalScrollBarEnabled = true
             setPadding(dp(16), dp(14), dp(16), dp(28))
@@ -361,7 +361,7 @@ class MainActivity : Activity() {
 
     private fun connectSelected() {
         val device = bonded.getOrNull(devices.selectedItemPosition) ?: run {
-            toast("Pair the target device first."); openBluetoothSettings(); return
+            toast("Pair the target device first."); startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)); return
         }
         if (!registered) { toast("The phone's Bluetooth HID service is not ready."); return }
         val ok = try { hid?.connect(device) == true } catch (_: SecurityException) { false }
