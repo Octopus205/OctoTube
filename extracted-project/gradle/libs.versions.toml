@@ -42,6 +42,7 @@ credentials = "1.5.0"
 googleid = "1.1.1"
 media3 = "1.5.1"
 kotlinxSerializationJson = "1.8.0"
+newValve = "1.6"
 
 
 [libraries]
@@ -103,6 +104,7 @@ androidx-media3-session = { group = "androidx.media3", name = "media3-session", 
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 androidx-media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "media3" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+newpipe-valve = { group = "com.github.shalva97", name = "NewValve", version.ref = "newValve" }
 
 
 [plugins]
