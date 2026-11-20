@@ -92,7 +92,7 @@ jobs:
           echo "KEYSTORE_PATH=$RUNNER_TEMP/octotube-signing/upload-key.jks" >> "$GITHUB_ENV"
 
       - name: Build signed release APK
-        if: ${{ secrets.OCTOTUBE_KEYSTORE_BASE64 != '' && secrets.OCTOTUBE_STORE_PASSWORD != '' && secrets.OCTOTUBE_KEY_PASSWORD != '' }}
+        if: ${{ env.OCTOTUBE_SIGNING_CONFIGURED == 'true' }}
         shell: bash
         env:
           STORE_PASSWORD: ${{ secrets.OCTOTUBE_STORE_PASSWORD }}
@@ -103,7 +103,7 @@ jobs:
           "$GRADLE_BIN" --no-daemon -POCTOTUBE_VERSION_CODE="$GITHUB_RUN_NUMBER" assembleRelease
 
       - name: Upload signed release APK
-        if: ${{ secrets.OCTOTUBE_KEYSTORE_BASE64 != '' && secrets.OCTOTUBE_STORE_PASSWORD != '' && secrets.OCTOTUBE_KEY_PASSWORD != '' }}
+        if: ${{ env.OCTOTUBE_SIGNING_CONFIGURED == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: OctoTube-signed-release-apk
