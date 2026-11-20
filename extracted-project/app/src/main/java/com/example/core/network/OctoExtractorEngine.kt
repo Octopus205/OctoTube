@@ -143,7 +143,12 @@ class OctoExtractorEngine(
                 val segments = sponsorJob.await()
                 // Invidious instances sometimes expose HLS playback but no progressive MP4
                 // formats. Ask Piped for direct downloadable formats as a secondary source.
-                val enrichedDetail = if (provider == ServiceProvider.INVIDIOUS) {
+                val enrichedDetail = if (
+                    provider == ServiceProvider.INVIDIOUS &&
+                    detail.videoStreams.none {
+                        !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                    }
+                ) {
                     var directFormats = emptyList<com.example.domain.model.VideoStreamOption>()
                     var directAudio = emptyList<com.example.domain.model.AudioStreamOption>()
                     var pipedHlsUrl: String? = null
