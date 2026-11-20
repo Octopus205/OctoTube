@@ -335,7 +335,12 @@ class PlayerCoordinator(
                 title = task.title,
                 artist = task.channelName,
                 artworkUrl = task.thumbnailUrl,
-                subtitles = syntheticDetail.subtitles
+                subtitles = syntheticDetail.subtitles,
+                mimeType = when (task.format) {
+                    com.example.domain.model.DownloadFormat.VIDEO_HLS_TS -> "video/mp2t"
+                    com.example.domain.model.DownloadFormat.AUDIO_M4A -> "audio/mp4"
+                    else -> "video/mp4"
+                }
             )
             controller.setMediaItem(mediaItem)
             controller.prepare()
