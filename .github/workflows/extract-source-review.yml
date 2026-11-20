@@ -2,6 +2,9 @@ name: Extract OctoTube source for review
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/extract-source-review.yml'
 
 permissions:
   contents: write
