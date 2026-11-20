@@ -274,13 +274,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun startDownload(detail: StreamDetail, format: DownloadFormat, chosenVideo: VideoStreamOption?) {
         val url = when (format) {
             DownloadFormat.VIDEO_MP4 -> {
-                chosenVideo?.takeIf { !it.videoOnly }?.url
-                    ?: detail.videoStreams.firstOrNull { !it.videoOnly }?.url
-                    ?: detail.videoStreams.firstOrNull()?.url
+                chosenVideo?.takeIf {
+                    !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                }?.url ?: detail.videoStreams.firstOrNull {
+                    !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                }?.url
             }
             DownloadFormat.AUDIO_M4A -> {
-                detail.audioStreams.firstOrNull()?.url
-                    ?: detail.videoStreams.lastOrNull()?.url
+                detail.audioStreams.firstOrNull {
+                    it.mimeType.contains("audio/mp4", ignoreCase = true) ||
+                        it.mimeType.contains("audio/aac", ignoreCase = true)
+                }?.url
             }
         }
         if (url.isNullOrBlank()) {
@@ -290,7 +294,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val qualityLabel = if (format == DownloadFormat.AUDIO_M4A) {
             detail.audioStreams.firstOrNull()?.qualityLabel ?: "128 kbps"
         } else {
-            chosenVideo?.qualityLabel ?: detail.videoStreams.firstOrNull { !it.videoOnly }?.qualityLabel ?: "720p"
+            chosenVideo?.qualityLabel ?: detail.videoStreams.firstOrNull {
+                !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+            }?.qualityLabel ?: "MP4"
         }
         downloadManager.startDownload(detail, format, url, qualityLabel)
         _toastMessage.value = "بدأ التحميل: ${detail.title}"
