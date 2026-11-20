@@ -100,7 +100,7 @@ class OctoDownloadManager(
         }
         val subtitleUrl = detail.subtitles.firstOrNull { !it.url.startsWith("local://") }?.url
         val subtitleFile = if (subtitleUrl != null) {
-            File(getDownloadsDir(), "${safeName}.vtt")
+            File(getDownloadsDir(), "${safeTitle}.vtt")
         } else null
 
         val job = scope.launch {
