@@ -132,6 +132,12 @@ class OctoExtractorEngine(
             }
         }
 
+        // Run NewPipe extraction concurrently with the metadata provider so its
+        // format list is ready without adding another sequential network round-trip.
+        val newPipeJob = if (provider != ServiceProvider.PEERTUBE) {
+            async { runCatching { NewPipeYouTubeExtractor.extract(videoId) }.getOrNull() }
+        } else null
+
         val candidates = buildInstanceList(provider, settings)
         for (baseUrl in candidates) {
             try {
@@ -209,7 +215,18 @@ class OctoExtractorEngine(
                             .sortedByDescending { it.height }
                     )
                 } else enrichedDetail
-                return@coroutineScope finalDetail.copy(sponsorSegments = segments)
+                val newPipeFormats = newPipeJob?.await()
+                val mergedDetail = if (newPipeFormats != null) {
+                    finalDetail.copy(
+                        videoStreams = (finalDetail.videoStreams + newPipeFormats.videos)
+                            .distinctBy { "${it.height}:${it.videoOnly}:${it.mimeType}:${it.url.substringBefore("?")}" }
+                            .sortedByDescending { it.height },
+                        audioStreams = (finalDetail.audioStreams + newPipeFormats.audio)
+                            .distinctBy { "${it.bitrate}:${it.mimeType}:${it.url.substringBefore("?")}" }
+                            .sortedByDescending { it.bitrate }
+                    )
+                } else finalDetail
+                return@coroutineScope mergedDetail.copy(sponsorSegments = segments)
             } catch (_: Exception) {
             }
         }
