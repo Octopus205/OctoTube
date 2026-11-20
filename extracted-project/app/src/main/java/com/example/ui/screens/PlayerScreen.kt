@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.os.Build
 import android.util.Rational
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -89,6 +90,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toRect
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.core.util.Consumer
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -166,6 +169,25 @@ fun PlayerScreen(
     var showSpeedSheet by remember { mutableStateOf(false) }
     var descriptionExpanded by remember { mutableStateOf(false) }
     var isFullScreen by remember { mutableStateOf(false) }
+
+    BackHandler(enabled = isFullScreen) {
+        isFullScreen = false
+    }
+
+    DisposableEffect(isFullScreen, context) {
+        val window = context.findActivity().window
+        val insetsController = WindowCompat.getInsetsController(window, window.decorView)
+        if (isFullScreen) {
+            insetsController.systemBarsBehavior =
+                WindowInsetsCompat.Type.systemBars()
+            insetsController.hide(WindowInsetsCompat.Type.systemBars())
+        } else {
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose {
+            insetsController.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
 
     val shouldAutoPip = settings.autoPipEnabled &&
         playbackState.isPlaying &&
