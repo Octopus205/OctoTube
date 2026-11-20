@@ -40,7 +40,7 @@ object NewPipeYouTubeExtractor {
             "https://www.youtube.com/watch?v=$videoId"
         )
 
-        val supportedHeights = setOf(144, 240, 360, 480, 720, 1080)
+        val supportedHeights = setOf(144, 240, 360, 720, 1080)
         val videos = (info.videoStreams + info.videoOnlyStreams)
             .asSequence()
             .filter { it.isUrl && it.content.isNotBlank() }
