@@ -13,6 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -253,17 +255,24 @@ fun PlayerScreen(
 
     val stream = (extractState as? UiLoadState.Success)?.data ?: playbackState.currentStream
 
-    Column(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        val wideLandscape = maxWidth >= 840.dp && maxWidth > maxHeight
+        val playerHeight = maxWidth * (9f / 16f)
+        // In tablet landscape, keep the player on the left and scrollable details/related videos on the right.
+        // In portrait, the same content remains stacked vertically.
         // Cinema Player Box
         Box(
             modifier = if (isFullScreen) {
                 Modifier.fillMaxSize().background(Color.Black)
             } else {
-                Modifier.fillMaxWidth().aspectRatio(16f / 9f).background(Color.Black)
+                Modifier
+                    .width(if (wideLandscape) maxWidth * 0.58f else maxWidth)
+                    .height(if (wideLandscape) maxHeight else playerHeight)
+                    .background(Color.Black)
             }
                 .then(pipModifier)
                 .clickable { showControls = !showControls }
@@ -549,7 +558,14 @@ fun PlayerScreen(
         // Scrollable Details Area
         when (extractState) {
             is UiLoadState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Box(
+                    modifier = Modifier
+                        .width(if (wideLandscape) maxWidth * 0.42f else maxWidth)
+                        .height(if (wideLandscape) maxHeight else (maxHeight - playerHeight).coerceAtLeast(0.dp))
+                        .align(if (wideLandscape) Alignment.TopEnd else Alignment.TopStart)
+                        .offset(y = if (wideLandscape) 0.dp else playerHeight),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text(
                         text = "جاري تجهيز البث والترجمات وفحص SponsorBlock…",
                         style = MaterialTheme.typography.bodyMedium,
@@ -561,7 +577,10 @@ fun PlayerScreen(
             is UiLoadState.Error -> {
                 Column(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .width(if (wideLandscape) maxWidth * 0.42f else maxWidth)
+                        .height(if (wideLandscape) maxHeight else (maxHeight - playerHeight).coerceAtLeast(0.dp))
+                        .align(if (wideLandscape) Alignment.TopEnd else Alignment.TopStart)
+                        .offset(y = if (wideLandscape) 0.dp else playerHeight)
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
@@ -581,7 +600,11 @@ fun PlayerScreen(
             is UiLoadState.Success -> {
                 val detail = extractState.data
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .width(if (wideLandscape) maxWidth * 0.42f else maxWidth)
+                        .height(if (wideLandscape) maxHeight else (maxHeight - playerHeight).coerceAtLeast(0.dp))
+                        .align(if (wideLandscape) Alignment.TopEnd else Alignment.TopStart)
+                        .offset(y = if (wideLandscape) 0.dp else playerHeight),
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
