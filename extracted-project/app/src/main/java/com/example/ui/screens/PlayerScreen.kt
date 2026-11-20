@@ -92,6 +92,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.graphics.toRect
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.core.util.Consumer
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
@@ -179,7 +180,7 @@ fun PlayerScreen(
         val insetsController = WindowCompat.getInsetsController(window, window.decorView)
         if (isFullScreen) {
             insetsController.systemBarsBehavior =
-                WindowInsetsCompat.Type.systemBars()
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             insetsController.hide(WindowInsetsCompat.Type.systemBars())
         } else {
             insetsController.show(WindowInsetsCompat.Type.systemBars())
