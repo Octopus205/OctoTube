@@ -76,12 +76,20 @@ class OctoDownloadManager(
                 }
 
                 val request = Request.Builder().url(streamUrl).get().build()
-                NetworkModule.okHttpClient.newCall(request).execute().use { response ->
+                NetworkModule.mediaOkHttpClient.newCall(request).execute().use { response ->
                     if (!response.isSuccessful) {
                         throw IllegalStateException("HTTP ${response.code}")
                     }
+                    val contentType = response.header("Content-Type").orEmpty().lowercase()
+                    if (contentType.contains("mpegurl") || streamUrl.substringBefore("?").endsWith(".m3u8", true)) {
+                        throw IllegalStateException("رابط HLS يحتاج تنزيلًا مجزأً؛ اختر رابط MP4 مباشرًا إن توفر")
+                    }
                     val body = response.body ?: throw IllegalStateException("Empty body")
                     val totalBytes = body.contentLength().coerceAtLeast(0L)
+                    if (contentType.contains("application/json") || contentType.startsWith("text/html")) {
+                        throw IllegalStateException("الخادم أعاد صفحة أو بيانات API بدل ملف فيديو")
+                    }
+                    targetFile.parentFile?.mkdirs()
 
                     body.byteStream().use { input ->
                         FileOutputStream(targetFile).use { output ->
@@ -134,6 +142,7 @@ class OctoDownloadManager(
                     total = targetFile.length()
                 )
             } catch (_: Exception) {
+                runCatching { targetFile.delete() }
                 dao.updateDownloadProgress(
                     videoId = detail.id,
                     status = DownloadStatus.FAILED.name,
