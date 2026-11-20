@@ -26,7 +26,7 @@ jobs:
           mkdir -p /tmp/octotube-unpack
           unzip -q OctoTube-project-ready.zip -d /tmp/octotube-unpack
 
-          SETTINGS_FILE="$(find /tmp/octotube-unpack -type f \\( -name settings.gradle -o -name settings.gradle.kts \\) -print -quit)"
+          SETTINGS_FILE="$(find /tmp/octotube-unpack -type f -name 'settings.gradle*' -print -quit)"
           if [ -z "$SETTINGS_FILE" ]; then
             echo "::error::No Gradle settings file found in OctoTube-project-ready.zip"
             find /tmp/octotube-unpack -maxdepth 4 -type f | sort | head -200
