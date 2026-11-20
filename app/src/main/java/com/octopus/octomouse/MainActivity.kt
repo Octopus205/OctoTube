@@ -346,6 +346,10 @@ class MainActivity : Activity() {
     private fun refreshDevices() {
         try {
             if (adapter == null) adapter = BluetoothAdapter.getDefaultAdapter()
+            if (adapter?.isEnabled == true && hid == null) {
+                initializeBluetooth()
+                return
+            }
             bonded.clear()
             bonded.addAll(adapter?.bondedDevices?.sortedBy { safeName(it) } ?: emptyList())
             val labels = if (bonded.isEmpty()) listOf("No paired devices yet — use Pair new device")
