@@ -69,6 +69,7 @@ fun DownloadsScreen(
     onPlayOffline: (DownloadTask) -> Unit,
     onCancelDownload: (String) -> Unit,
     onDeleteDownload: (String) -> Unit,
+    onChooseFolder: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedFilter by remember { mutableStateOf(DownloadFilter.ALL) }
@@ -112,6 +113,12 @@ fun DownloadsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+            Column(horizontalAlignment = Alignment.End) {
+                androidx.compose.material3.TextButton(onClick = onChooseFolder) {
+                    Icon(Icons.Filled.DownloadDone, contentDescription = null)
+                    Text("مجلد الحفظ")
+                }
             }
             Surface(
                 shape = MaterialTheme.shapes.small,
