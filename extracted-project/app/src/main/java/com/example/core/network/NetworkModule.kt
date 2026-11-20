@@ -15,21 +15,28 @@ object NetworkModule {
         coerceInputValues = true
     }
 
-    val okHttpClient: OkHttpClient by lazy {
+    private fun createHttpClient(acceptHeader: String): OkHttpClient =
         OkHttpClient.Builder()
-            .connectTimeout(12, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .writeTimeout(20, TimeUnit.SECONDS)
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(60, TimeUnit.SECONDS)
             .followRedirects(true)
+            .followSslRedirects(true)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "OctoPipe-Android/1.0 (Independent Media Client)")
-                    .header("Accept", "application/json")
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36 OctoTube/1.0")
+                    .header("Accept", acceptHeader)
                     .build()
                 chain.proceed(request)
             }
             .build()
-    }
+
+    // JSON API requests and media downloads must not share the same Accept header.
+    val okHttpClient: OkHttpClient by lazy { createHttpClient("application/json") }
+
+    // ExoPlayer requests video/audio segments and manifests, not JSON documents.
+    val mediaOkHttpClient: OkHttpClient by lazy { createHttpClient("*/*") }
 
     suspend fun getString(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url).get().build()
