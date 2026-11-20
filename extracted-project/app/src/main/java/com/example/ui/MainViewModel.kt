@@ -277,10 +277,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun startDownload(detail: StreamDetail, format: DownloadFormat, chosenVideo: VideoStreamOption?) {
-        val url = when (format) {
-            DownloadFormat.VIDEO_MP4 -> {
+        val effectiveFormat = if (
+            format == DownloadFormat.VIDEO_MP4 &&
+            chosenVideo?.mimeType?.contains("mpegurl", ignoreCase = true) == true
+        ) DownloadFormat.VIDEO_HLS_TS else format
+        val url = when (effectiveFormat) {
+            DownloadFormat.VIDEO_MP4, DownloadFormat.VIDEO_HLS_TS -> {
                 chosenVideo?.takeIf {
-                    !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
+                    !it.videoOnly && (
+                        it.mimeType.contains("video/mp4", ignoreCase = true) ||
+                            it.mimeType.contains("mpegurl", ignoreCase = true)
+                    )
                 }?.url ?: detail.videoStreams.firstOrNull {
                     !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
                 }?.url
@@ -303,7 +310,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 !it.videoOnly && it.mimeType.contains("video/mp4", ignoreCase = true)
             }?.qualityLabel ?: "MP4"
         }
-        downloadManager.startDownload(detail, format, url, qualityLabel)
+        downloadManager.startDownload(detail, effectiveFormat, url, qualityLabel)
         _toastMessage.value = "بدأ التحميل: ${detail.title}"
     }
 
